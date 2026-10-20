@@ -1934,3 +1934,148 @@ describe('PowerShell value option prefixes', () => {
     expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
   });
 });
+
+// ─── Sixth-read fold (mmnto-ai/totem#3106) ──────────────────────────────
+
+describe('the pre-scan normaliser reaches substitutions and heredoc bodies', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [FLY_DENY, MIGRATE_DENY] }));
+
+  it.each([
+    ['a continuation inside $\\<LF>(', 'echo $\\\n(fly deploy)', 'fly-deploy'],
+    ['the same inside double quotes', 'echo "$\\\n(fly deploy)"', 'fly-deploy'],
+    ['the same in an unquoted heredoc body', 'cat <<EOT\n$\\\n(fly deploy)\nEOT', 'fly-deploy'],
+    ['the same one level down', 'echo $(echo $\\\n(fly deploy))', 'fly-deploy'],
+    ['a substitution after an ANSI-C string', "echo $'a\\'b' $(fly deploy)", 'fly-deploy'],
+    ['a backtick after an ANSI-C string', "echo $'it\\'s' `fly deploy`", 'fly-deploy'],
+    [
+      'the quoted heredoc ending in \\ (fifth read)',
+      "cat <<'EOT'\nx\\\nEOT\npnpm db:migrate:prod",
+      'migrate',
+    ],
+    ['the <<"EOT" form (fifth read)', 'cat <<"EOT"\nx\\\nEOT\npnpm db:migrate:prod', 'migrate'],
+  ])('%s → deny', (_label, command, ref) => {
+    const v = check(bash(command));
+    expect([v.disposition, v.provenance.ref]).toEqual(['deny', ref]);
+  });
+
+  it('the single-quoted split stays literal', () => {
+    expect(check(bash("echo 'pnpm db:mi\\\ngrate:prod'")).provenance.ref).toBe('no-policy-match');
+  });
+});
+
+describe('heredoc delimiters as bash reads them', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [FLY_DENY] }));
+
+  it.each([
+    ["<<E'O'T", "cat <<E'O'T\nx\nEOT\nfly deploy"],
+    ['<<E\\OT', 'cat <<E\\OT\nx\nEOT\nfly deploy'],
+    ['<<E"O"T', 'cat <<E"O"T\nx\nEOT\nfly deploy'],
+    ["<<'E'OT", "cat <<'E'OT\nx\nEOT\nfly deploy"],
+    ["<<$'EOT'", "cat <<$'EOT'\nx\nEOT\nfly deploy"],
+    ['<<\\EOT', 'cat <<\\EOT\nx\nEOT\nfly deploy'],
+    ['<<EO\\<LF>T', 'cat <<EO\\\nT\nx\nEOT\nfly deploy'],
+  ])('%s ends at EOT, so the command after it is read', (_label, command) => {
+    const v = check(bash(command));
+    expect([v.disposition, v.provenance.ref]).toEqual(['deny', 'fly-deploy']);
+    expect(v.provenance.matched).toBe('fly deploy');
+  });
+
+  it.each([
+    ["<<E'O'T", "cat <<E'O'T\n$(fly deploy)\nEOT"],
+    ['<<\\EOT', 'cat <<\\EOT\n$(fly deploy)\nEOT'],
+  ])('a %s body is literal: its substitution is not read', (_label, command) => {
+    const v = check(bash(command));
+    expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
+  });
+
+  it('a heredoc with no end line warns unterminated-heredoc', () => {
+    const v = check(bash('cat <<EOF\nx\nfly deploy'));
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'unterminated-heredoc']);
+    expect(v.provenance.matched).toBe('cat <<EOF');
+  });
+
+  it('a deny matched before an unterminated heredoc still stands', () => {
+    const v = check(bash('fly deploy; cat <<EOF\nx'));
+    expect([v.disposition, v.provenance.ref]).toEqual(['deny', 'fly-deploy']);
+    expect(v.provenance.detail).toMatchObject({ unterminatedHeredocs: ['fly deploy; cat <<EOF'] });
+  });
+});
+
+describe('PowerShell -File prefixes', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([
+    'pwsh -Fi x.ps1 "arg"',
+    'pwsh -fil x.ps1 "arg"',
+    'pwsh -File:x.ps1 "arg"',
+    'pwsh -f x.ps1 "arg"',
+  ])('%s is a script run, not opaque', (command) => {
+    const v = check(pwsh(command));
+    expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
+  });
+});
+
+describe('the override and too-long deny rows', () => {
+  const longSql = `db/${'d/'.repeat(549)}x.sql`;
+
+  it('records every lifted row, a matched deny and a too-long deny', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        { id: 'db', action_kind: 'code_edit', scope: { paths: [longSql] }, disposition: 'deny' },
+        {
+          id: 'sql',
+          action_kind: 'db_migration',
+          scope: { paths: ['**/*.sql'] },
+          disposition: 'deny',
+        },
+      ],
+    });
+    const lines: string[] = [];
+    const v = check(
+      { tool: 'Write', path: longSql },
+      { env: { [ACTION_POLICY_OVERRIDE_ENV]: 'db,sql' }, writeStderr: (l) => void lines.push(l) },
+    );
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'db']);
+    expect(v.provenance.detail).toMatchObject({ overriddenRows: ['db', 'sql'] });
+    expect(lines).toEqual([
+      `[action-policy] OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing path "${longSql}"; row(s) db, sql would have denied.\n`,
+    ]);
+  });
+
+  const envPolicy = {
+    version: 1,
+    environments: [{ name: 'prod', branches: ['main'] }],
+    rows: [
+      {
+        id: 'prod-sql',
+        action_kind: 'db_migration',
+        scope: { paths: ['**/*.sql'] },
+        environment: 'prod',
+        disposition: 'deny',
+      },
+    ],
+  };
+
+  it('a too-long environment deny row still counts under an unreadable branch', () => {
+    writePolicy(envPolicy);
+    const v = check({ tool: 'Write', path: longSql }, { gitBranchReader: () => '' });
+    expect([v.disposition, v.provenance.ref]).toEqual(['deny', 'subject-too-long']);
+  });
+
+  it('refuses the override for a too-long environment deny row under an unreadable branch', () => {
+    writePolicy(envPolicy);
+    const lines: string[] = [];
+    const v = check(
+      { tool: 'Write', path: longSql },
+      {
+        gitBranchReader: () => '',
+        env: { [ACTION_POLICY_OVERRIDE_ENV]: 'prod-sql' },
+        writeStderr: (l) => void lines.push(l),
+      },
+    );
+    expect([v.disposition, v.provenance.ref]).toEqual(['deny', 'prod-sql']);
+    expect(v.provenance.detail).toMatchObject({ overrideRefused: true });
+    expect(lines).toEqual([]);
+  });
+});

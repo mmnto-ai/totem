@@ -1332,6 +1332,30 @@ describe('orient action-policy section', () => {
     ]);
   });
 
+  it('renders the rows a too-long touched path could not be compared against', async () => {
+    writePolicy(POLICY);
+    const longPath = `db/migrations/${'a'.repeat(1100)}.sql`;
+    mockDeriveTouchedPaths.mockResolvedValue([longPath]);
+
+    await runJson();
+    expect(parseJson().actionPolicy).toMatchObject({
+      matches: [
+        {
+          path: longPath,
+          rowId: 'subject-too-long',
+          disposition: 'deny',
+          tooLongFor: ['migrations'],
+        },
+      ],
+    });
+
+    stdout = '';
+    const text = await runText();
+    expect(text.split('\n').filter((l) => l.includes('subject-too-long'))).toEqual([
+      `    ${longPath} → subject-too-long (deny; rows migrations)`,
+    ]);
+  });
+
   it('reads the policy from the configured totemDir, not a hard-coded .totem', async () => {
     fs.mkdirSync(path.join(tmpRoot, '.git'));
     const nested = path.join(tmpRoot, 'config', 'totem');

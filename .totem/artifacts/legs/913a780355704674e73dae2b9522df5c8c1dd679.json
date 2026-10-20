@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "913a780355704674e73dae2b9522df5c8c1dd679",
+  "readAt": "2026-10-20T01:17:33Z",
+  "findings": [
+    {
+      "id": "3106-r6-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 608,
+      "claim": "A line continuation inside a substitution opener is not joined: substitutionBodies scans the raw segment text, and the join exists only in tokenizeShell word-building, so the docs' 'joins a line continuation as bash does' does not reach substitution recognition.",
+      "counterexample": "Verdicts at 250b3ad9 / d07dbda9 / 913a7803, then bash: 'echo $\\<LF>(fly deploy)' allow / deny / allow, bash runs fly deploy; 'echo \"$\\<LF>(fly deploy)\"' allow / deny / allow, runs; 'cat <<EOT<LF>$\\<LF>(fly deploy)<LF>EOT' allow / deny / allow, runs; 'echo $(echo $\\<LF>(fly deploy))' allow / deny / allow, runs. Not denied at 250b3ad9, so not a regression by the brief's rule, but it reopens a shape d07dbda9 closed."
+    },
+    {
+      "id": "3106-r6-F2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/config-reference.md",
+      "line": 311,
+      "claim": "'an ANSI-C $'...' string is read with its backslash escapes' holds only in tokenizeShell (packages/core/src/transport-shield.ts:562). substitutionBodies, backtickBodies and findHeredocs still close a single quote at an escaped quote, and escapes are not decoded.",
+      "counterexample": "Allow at all three heads, bash runs fly deploy each time: \"echo $'a\\'b' $(fly deploy)\"; \"echo $'it\\'s' `fly deploy`\"; \"echo $'it\\'s <<EOT' \\'<LF>fly deploy\" (findHeredocs blanks fly deploy as an unterminated body); \"$'\\x70npm' db:migrate:prod\" allow x3, bash runs pnpm db:migrate:prod."
+    },
+    {
+      "id": "3106-r6-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 233,
+      "claim": "When HEREDOC_AT reads a different delimiter from bash's (partly quoted, backslash inside, ANSI-C, or split by a continuation), the gate blanks the body to the end, or to a line bash does not treat as the end. That is a false allow; the docs (config-reference.md:311) call the partly quoted case a false deny.",
+      "counterexample": "'cat <<E'O'T<LF>body<LF>EOT<LF>fly deploy' allow x3, bash runs (likewise <<E\\OT, <<E\"O\"T, <<'E'OT, <<$'EOT'); terminated variant '...EOT<LF>fly deploy<LF>E' allow x3, bash runs; 'cat <<EO\\<LF>T<LF>body<LF>EOT<LF>pnpm db:migrate:prod' allow / deny / allow, bash runs."
+    },
+    {
+      "id": "3106-r6-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 749,
+      "claim": "A prefix of -File (e.g. -Fi) is now read as a value option, but the script-run test accepts only -f and -file, so a script run with a quoted argument is reported as an opaque shell string.",
+      "counterexample": "'pwsh -Fi x.ps1 \"arg\"' on both tools: d07dbda9 allow no-policy-match, 913a7803 warn opaque-shell-string; pwsh reads -Fi as -File."
+    },
+    {
+      "id": "3106-r6-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 806,
+      "claim": "The prefix ambiguity is counted over the list's aliases, so -ps is ambiguous only because -psc and -psconsolefile are both listed. A value with a backtick-escaped quote also ends early. Neither is disclosed.",
+      "counterexample": "'powershell -ps x.psc1 \"x\"' allow; '-psc' and '-psco' warn opaque-shell-string; 'pwsh -wd \"a b`\" c\" \"x\"' allow."
+    },
+    {
+      "id": "3106-r6-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 1164,
+      "claim": "An override that lifts both a matched literal deny row and a too-long deny row records only the too-long row in overriddenRows and the stderr line, while the docs say the provenance records the overridden rows.",
+      "counterexample": "Rows a (literal path deny) and b ('**' deny), 1103-character path, override 'a,b': warn citing b, overriddenRows [\"b\"], alsoMatched [\"a\"], stderr names only b."
+    },
+    {
+      "id": "3106-r6-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 985,
+      "claim": "With the branch unreadable, an override lifts a too-long prod deny row, whereas a matched prod deny row refuses the override (config-reference.md:350). Align the two, or disclose the difference.",
+      "counterexample": "Row '**/*.sql' deny, environment prod, branch reader returns null, override names the row, 1103-character path: warn citing the row, overriddenRows [\"r\"]; the matched-row equivalent is documented as refused."
+    },
+    {
+      "id": "3106-r6-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.test.ts",
+      "line": 1829,
+      "claim": "Test pins are missing for the <<\\EOT form, for a too-long environment row still counting when the branch is unreadable, and for the continuation inside a substitution opener (F1).",
+      "counterexample": "The new it.each covers <<'EOT' and <<\"EOT\" only; no test sets an unreadable branch with a too-long environment row; no test covers '$\\<LF>('."
+    },
+    {
+      "id": "3106-r6-F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 520,
+      "claim": "Orient renders a too-long touched path with rowId 'subject-too-long', a ref and not a row id, and does not name the rows in tooLongFor; no test pins this rendering.",
+      "counterexample": "Reasoned from the code: verdict.provenance.ref is pushed as rowId, so the line reads '<1100-character path> -> subject-too-long (deny)'."
+    },
+    {
+      "id": "3106-r6-F10",
+      "severity": "QUESTION",
+      "file": "docs/wiki/config-reference.md",
+      "line": 353,
+      "claim": "With no project totem.config.ts, on a machine with a global profile config whose totemDir is '.', the gate and orient resolve the policy at the repo root rather than at .totem. Is the global profile meant to relocate the policy? Pre-existing and outside this diff.",
+      "counterexample": "Temp repository with .totem/action-policy.json denying 'fly deploy' and no project config: 'gate check --event action-policy' gives allow no-policy-file, and orient omits the section; after adding a valid totem.config.ts the result is deny citing fly."
+    }
+  ],
+  "folded": [
+    "3106-r6-F1",
+    "3106-r6-F2",
+    "3106-r6-F3",
+    "3106-r6-F4",
+    "3106-r6-F5",
+    "3106-r6-F6",
+    "3106-r6-F7",
+    "3106-r6-F8",
+    "3106-r6-F9",
+    "3106-r6-F10"
+  ],
+  "verdict": "Read 6 of the action-policy gate, scoped to 913a7803: blocking=0 material=3 minor=6 question=1 folded=10 (counts as typed). The fifth read's blocker is closed by measurement: 58 shapes run through the evaluator at 250b3ad9, d07dbda9 and 913a7803 and through bash itself, none denied at 250b3ad9 and allowed at 913a7803; the shield unchanged (both suites, the opt-in pin, a 1,200-input differential with zero changes). NOT CONVERGED by its own line on three material items, two of them pre-existing in the first commit and all three the same lexer seam: the raw scanners for substitutions, backticks and heredocs run on text the tokenizer's rules have not normalised. Folded by the seat in the next commit: F1 and F2 (one shared pre-scan normaliser, applied to each segment and heredoc body AFTER heredoc blanking so no delimiter can be swallowed, that joins continuations and blanks ANSI-C string contents under the tokenizer's quote and comment rules, so the substitution and backtick scanners see what bash sees; hex and octal escapes that spell a program name are named as not decoded); F3 (a heredoc delimiter is read as bash reads it, the whole word after quote removal, any quote or backslash making the body literal; a span whose end line never appears is a loud warn, ref unterminated-heredoc, never a silent blank to the end; the docs' false-deny sentence is corrected to this); F4 (the script-run test accepts any prefix of -File); F5 (disclosed); F6 (every lifted row recorded); F7 (an unreadable branch refuses the override for a too-long environment deny row as for a matched one); F8 (the pins); F9 (orient names the rows of a too-long path); F10 (the docs say the configured totemDir applies, a global profile's included). A seventh read, scoped to the normaliser and the delimiter rule with the same three-head corpus, follows; convergence is then named on the standing rule that a shape outside the stated reach is a disclosure sentence."
+}

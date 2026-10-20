@@ -260,8 +260,10 @@ export interface OrientActionPolicyMatch {
   rowId: string;
   /** The row's own disposition (`display` kept), else the gate's verdict. */
   disposition: string;
-  /** True when the override env var turned this row's `deny` into `allow`. */
+  /** True when the override env var lifted this row's `deny`. */
   overridden?: true;
+  /** For a `subject-too-long` verdict: the rows the path was too long to compare against. */
+  tooLongFor?: string[];
 }
 
 /**
@@ -521,6 +523,9 @@ async function deriveActionPolicy(
         disposition:
           typeof policyDisposition === 'string' ? policyDisposition : verdict.disposition,
         ...(detail.overriddenBy !== undefined ? { overridden: true as const } : {}),
+        ...(verdict.provenance.ref === 'subject-too-long' && Array.isArray(detail.tooLongFor)
+          ? { tooLongFor: detail.tooLongFor as string[] }
+          : {}),
       });
       // totem-context: a per-path evaluation failure (a path the payload parser refuses) becomes that path's own error row, never a thrown orient
     } catch (err) {
@@ -532,7 +537,8 @@ async function deriveActionPolicy(
 
 /** One rendered match line body: `path → row (disposition)`. */
 function actionPolicyMatchText(m: OrientActionPolicyMatch): string {
-  return `${m.path} → ${m.rowId} (${m.disposition}${m.overridden ? ', overridden' : ''})`;
+  const rows = m.tooLongFor !== undefined ? `; rows ${m.tooLongFor.join(', ')}` : '';
+  return `${m.path} → ${m.rowId} (${m.disposition}${rows}${m.overridden ? ', overridden' : ''})`;
 }
 
 /** The disclosed limit of every command-text gate, one sentence. */

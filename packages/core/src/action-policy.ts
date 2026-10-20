@@ -12,6 +12,7 @@ import {
   blankHeredocBodies,
   findHeredocs,
   MATCHED_FRAGMENT_MAX,
+  normalizeForScan,
   programSpellings,
   programStart,
   RESERVED_BEFORE_PROGRAM,
@@ -89,6 +90,7 @@ const REF_NO_POLICY_MATCH = 'no-policy-match';
 const REF_OUTSIDE_REPO = 'outside-repo';
 const REF_ENVIRONMENT_UNEVALUABLE = 'environment-unevaluable';
 const REF_SUBJECT_TOO_LONG = 'subject-too-long';
+const REF_UNTERMINATED_HEREDOC = 'unterminated-heredoc';
 
 // ─── Schema (the file boundary) ────────────────────────────────────────────
 
@@ -594,19 +596,46 @@ function commandPatternCompare(
  * PowerShell's backtick is its escape character, so no backtick body is read
  * there, and its backslashes are path characters.
  */
-function commandStatements(command: string, powershell: boolean, depth = 0): Statement[] {
+function commandStatements(
+  command: string,
+  powershell: boolean,
+  depth = 0,
+  sink: { unterminated: string[] } = { unterminated: [] },
+): Statement[] {
   // On the Bash tool the tokenizer joins line continuations as bash does
-  // (heredoc bodies are blanked first, so nothing in a body is joined).
-  const opts = { powershell, literalBackslash: powershell, joinContinuations: !powershell };
+  // (heredoc bodies are blanked first, so nothing in a body is joined), and a
+  // heredoc delimiter is read as bash reads it.
+  const opts = {
+    powershell,
+    literalBackslash: powershell,
+    joinContinuations: !powershell,
+    bashDelimiters: !powershell,
+  };
   const spans = findHeredocs(command, opts);
+  if (!powershell) {
+    for (const span of spans.filter((s) => s.unterminated)) {
+      const operatorLine = command
+        .slice(0, span.bodyStart)
+        .replace(/\r?\n$/, '')
+        .split('\n')
+        .pop();
+      sink.unterminated.push(bound((operatorLine ?? '').trim()));
+    }
+  }
   const blanked = blankHeredocBodies(command, spans);
   const out: Statement[] = [];
-  // A heredoc body has no quoting or comment rule: an apostrophe, a quoted span
-  // or a `#` there is text, so its substitutions are read raw.
+  // The raw substitution scanners read text the tokenizer has not normalised,
+  // so it is normalised for them first (continuations removed, ANSI-C strings
+  // blanked), AFTER heredoc blanking. A heredoc body has no quoting or comment
+  // rule: an apostrophe, a quoted span or a `#` there is text, so its
+  // substitutions are read raw.
+  const normalize = (text: string, heredocBody: boolean): string =>
+    powershell ? text : normalizeForScan(text, { heredocBody });
   const nested = (text: string, heredocBody: boolean): void => {
     if (depth >= SUBSTITUTION_DEPTH_MAX) return;
-    for (const body of substitutionBodies(text, { raw: heredocBody, powershell })) {
-      out.push(...commandStatements(body, powershell, depth + 1));
+    const read = normalize(text, heredocBody);
+    for (const body of substitutionBodies(read, { raw: heredocBody, powershell })) {
+      out.push(...commandStatements(body, powershell, depth + 1, sink));
     }
   };
   let cursor = 0;
@@ -627,8 +656,9 @@ function commandStatements(command: string, powershell: boolean, depth = 0): Sta
       ...unquotedBodies.map((b): [string, boolean] => [b, true]),
     ];
     for (const [text, heredocBody] of texts) {
-      for (const body of backtickBodies(text, undefined, { raw: heredocBody })) {
-        out.push(...commandStatements(body, powershell, depth + 1));
+      const read = normalize(text, heredocBody);
+      for (const body of backtickBodies(read, undefined, { raw: heredocBody })) {
+        out.push(...commandStatements(body, powershell, depth + 1, sink));
       }
     }
   }
@@ -746,7 +776,8 @@ function isOpaqueShell(statement: Statement, powershell: boolean): boolean {
   if (lower.some((n) => POWERSHELL_HOSTS.has(n))) {
     if (args.some(isPowerShellStringFlag)) return true;
     const read = readShellArgs(args);
-    const file = args.some((a) => /^-f(?:ile)?(?::|$)/i.test(a));
+    // Any prefix of `-File` (`-f`, `-fi`, `-fil`, `-file`), colon value or not.
+    const file = args.some((a) => /^-f(?:i(?:le?)?)?(?::|$)/i.test(a));
     if (!file && firstPositionalIsQuoted(statement.raw, program)) return true;
     const script = file || args.some((a) => /\.ps1$/i.test(a));
     return (
@@ -936,6 +967,7 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
   let opaque: string | null = null;
   let opaqueStatements: string[] = [];
   let tooLong: RowMatch[] = [];
+  let unterminatedHeredocs: string[] = [];
   if ('path' in parsed) {
     scopeKind = 'path';
     const rel = repoRelativePath(parsed.path, root);
@@ -952,7 +984,9 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
   } else {
     scopeKind = 'command';
     const powershell = parsed.tool === 'PowerShell';
-    const statements = commandStatements(parsed.command, powershell);
+    const heredocs = { unterminated: [] as string[] };
+    const statements = commandStatements(parsed.command, powershell, 0, heredocs);
+    unterminatedHeredocs = heredocs.unterminated;
     const scan = matchCommandRows(config.rows, statements, powershell);
     matches = scan.matches;
     tooLong = scan.tooLong;
@@ -970,6 +1004,7 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
   let currentEnvironments: string[] | null = null;
   let skipped: RowMatch[] = [];
   let environmentWhy = '';
+  let environmentUnreadable = false;
   const tooLongNamesEnvironment = tooLong.some(
     (m) => m.row.environment !== ACTION_POLICY_ANY_ENVIRONMENT,
   );
@@ -983,9 +1018,10 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
       candidates = matches.filter(applies);
       // A too-long comparison counts only for a row that applies on this branch.
       tooLong = tooLong.filter(applies);
-    } else if (envMatches.length > 0) {
-      skipped = envMatches;
+    } else {
+      environmentUnreadable = true;
       environmentWhy = env.why;
+      if (envMatches.length > 0) skipped = envMatches;
     }
   }
   const skippedDetail =
@@ -1159,30 +1195,65 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
     const ids = tooLong.map((m) => m.row.id);
     const tooLongDeny = tooLong.filter((m) => m.row.disposition === 'deny');
     const named = overriddenRowIds(context);
-    if (tooLongDeny.length > 0 && tooLongDeny.every((m) => named.has(m.row.id))) {
-      // Every too-long deny row is named: lifted, like any other deny.
-      const lifted = tooLongDeny.map((m) => m.row.id);
-      const first = tooLongDeny[0] as RowMatch;
-      const kinds = [...new Set(tooLongDeny.map((m) => m.row.action_kind))].join(', ');
+    const allNamed = tooLongDeny.length > 0 && tooLongDeny.every((m) => named.has(m.row.id));
+    const envBlocker = environmentUnreadable
+      ? tooLongDeny.find((m) => m.row.environment !== ACTION_POLICY_ANY_ENVIRONMENT)
+      : undefined;
+    if (allNamed && envBlocker !== undefined) {
+      // Refused as for a matched environment deny row: the branch that would
+      // say whether the row applies could not be read.
+      const disposition: GateDisposition = context?.tier === 'pilot' ? 'warn' : 'deny';
+      decision = {
+        verdict: {
+          disposition,
+          reason: `${ACTION_POLICY_OVERRIDE_ENV} refused: row ${envBlocker.row.id} (${envBlocker.row.action_kind}, deny) names environment "${envBlocker.row.environment}", which could not be read (${environmentWhy}); the override never applies while such a row is skipped.`,
+          provenance: {
+            source,
+            ref: envBlocker.row.id,
+            matched: envBlocker.matched,
+            checkedAt,
+            detail: {
+              scopeKind,
+              tooLongFor: ids,
+              overrideRefused: true,
+              alsoMatched: matches.map((m) => m.row.id),
+            },
+          },
+        },
+      };
+    } else if (allNamed) {
+      // Every too-long deny row is named: lifted, like any other deny, and
+      // recorded beside any matched deny row the override already lifted.
+      const before = decision.verdict.provenance.detail?.overriddenRows;
+      const already = Array.isArray(before) ? (before as string[]) : [];
+      const lifted = [...new Set([...already, ...tooLongDeny.map((m) => m.row.id)])];
+      const liftedRows = config.rows.filter((r) => lifted.includes(r.id));
+      const firstId = lifted[0] as string;
+      const firstRow = liftedRows.find((r) => r.id === firstId);
+      const firstMatched =
+        already.length > 0
+          ? (decision.verdict.provenance.matched ?? '')
+          : (tooLongDeny[0] as RowMatch).matched;
+      const kinds = [...new Set(liftedRows.map((r) => r.action_kind))].join(', ');
       decision = {
         verdict: {
           disposition: 'warn',
-          reason: `${ACTION_POLICY_OVERRIDE_ENV} lifted row(s) ${lifted.join(', ')} (${kinds}, deny): ${first.row.reason ?? 'governed'}; proceeding`,
+          reason: `${ACTION_POLICY_OVERRIDE_ENV} lifted row(s) ${lifted.join(', ')} (${kinds}, deny): ${firstRow?.reason ?? 'governed'}; proceeding`,
           provenance: {
             source,
-            ref: first.row.id,
-            matched: first.matched,
+            ref: firstId,
+            matched: firstMatched,
             checkedAt,
             detail: {
               scopeKind,
               tooLongFor: ids,
               overriddenBy: ACTION_POLICY_OVERRIDE_ENV,
               overriddenRows: lifted,
-              alsoMatched: matches.map((m) => m.row.id),
+              alsoMatched: matches.map((m) => m.row.id).filter((id) => id !== firstId),
             },
           },
         },
-        notice: `${ACTION_POLICY_NOTICE_PREFIX} OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing ${scopeKind} "${first.matched}"; row(s) ${lifted.join(', ')} would have denied.\n`,
+        notice: `${ACTION_POLICY_NOTICE_PREFIX} OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing ${scopeKind} "${firstMatched}"; row(s) ${lifted.join(', ')} would have denied.\n`,
       };
     } else if (tooLongDeny.length > 0 || decision.verdict.disposition === 'allow') {
       const disposition: GateDisposition =
@@ -1214,6 +1285,39 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
           provenance: {
             ...decision.verdict.provenance,
             detail: { ...decision.verdict.provenance.detail, tooLongFor: ids },
+          },
+        },
+      };
+    }
+  }
+
+  if (unterminatedHeredocs.length > 0) {
+    // A heredoc whose end line never appears: the rest of the command was read
+    // as its body, so the command's end could not be found. Loud, never a
+    // silent allow; a deny or warn found elsewhere stands, carrying the fact.
+    if (decision.verdict.disposition === 'allow') {
+      decision = {
+        verdict: {
+          disposition: 'warn',
+          reason:
+            "A heredoc in this command has no end line, so the command's end could not be found; the action-policy gate does not read what follows the operator.",
+          provenance: {
+            source,
+            ref: REF_UNTERMINATED_HEREDOC,
+            matched: unterminatedHeredocs[0] as string,
+            checkedAt,
+            detail: { scopeKind, unterminatedHeredocs },
+          },
+        },
+      };
+    } else {
+      decision = {
+        ...decision,
+        verdict: {
+          ...decision.verdict,
+          provenance: {
+            ...decision.verdict.provenance,
+            detail: { ...decision.verdict.provenance.detail, unterminatedHeredocs },
           },
         },
       };

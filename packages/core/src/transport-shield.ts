@@ -214,6 +214,16 @@ export interface ScanOptions {
    * action-policy gate, mmnto-ai/totem#3106).
    */
   joinContinuations?: boolean;
+  /**
+   * Read a heredoc delimiter as bash reads it: the whole word, its quotes and
+   * backslashes removed to give the end word, the body literal when the word
+   * carried any quote or backslash (`<<E'O'T`, `<<E\OT`, `<<$'EOT'` all end at
+   * `EOT`), and a line continuation inside the word joined first (a backslash
+   * then a newline between `EO` and `T` still reads `EOT`). Off by default: the shield's rows and the gate wrapper's verbatim
+   * port read the delimiter with {@link HEREDOC_AT}. Read by `findHeredocs`
+   * only (the action-policy gate, mmnto-ai/totem#3106).
+   */
+  bashDelimiters?: boolean;
 }
 
 /**
@@ -423,6 +433,21 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
       boundary = true;
       continue;
     }
+    if (
+      opts.bashDelimiters === true &&
+      ch === '<' &&
+      command[i + 1] === '<' &&
+      command[i - 1] !== '<' &&
+      command[i + 2] !== '<'
+    ) {
+      const d = readBashDelimiter(command, i);
+      if (d !== null) {
+        pending.push({ stripTabs: d.stripTabs, quoted: d.quoted, delimiter: d.delimiter });
+        i += d.length;
+        boundary = false;
+        continue;
+      }
+    }
     if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
       const m = HEREDOC_AT.exec(command.slice(i));
       if (m !== null) {
@@ -441,6 +466,206 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
   }
   if (pending.length > 0) consumeBodies(command.length);
   return spans;
+}
+
+/** Characters that end an unquoted heredoc delimiter word. */
+const DELIMITER_STOP: ReadonlySet<string> = new Set([
+  ' ',
+  '\t',
+  '\r',
+  '\n',
+  '<',
+  '>',
+  '(',
+  ')',
+  '|',
+  '&',
+  ';',
+]);
+
+/**
+ * The heredoc operator at `at` (`<<` or `<<-`) read as bash reads its
+ * delimiter word: blanks after the operator skipped; then the word, where a
+ * single- or double-quoted span, an ANSI-C `$'…'` span or a backslash-escaped
+ * character contributes its text without the quoting and marks the body
+ * literal, and a backslash-newline (LF or CRLF) is a line continuation removed
+ * before the word is read. `null` when no word follows.
+ */
+function readBashDelimiter(
+  command: string,
+  at: number,
+): { length: number; delimiter: string; quoted: boolean; stripTabs: boolean } | null {
+  let j = at + 2;
+  const stripTabs = command[j] === '-';
+  if (stripTabs) j += 1;
+  const continuation = (k: number): number => {
+    if (command[k] !== '\\') return 0;
+    if (command[k + 1] === '\n') return 2;
+    if (command[k + 1] === '\r' && command[k + 2] === '\n') return 3;
+    return 0;
+  };
+  for (;;) {
+    const skip = continuation(j);
+    if (skip > 0) j += skip;
+    else if (command[j] === ' ' || command[j] === '\t') j += 1;
+    else break;
+  }
+  let word = '';
+  let quoted = false;
+  while (j < command.length) {
+    const c = command[j] as string;
+    const skip = continuation(j);
+    if (skip > 0) {
+      j += skip;
+      continue;
+    }
+    if (c === '\\') {
+      if (j + 1 < command.length) word += command[j + 1];
+      quoted = true;
+      j += 2;
+      continue;
+    }
+    if (c === "'") {
+      const close = command.indexOf("'", j + 1);
+      const end = close === -1 ? command.length : close;
+      word += command.slice(j + 1, end);
+      quoted = true;
+      j = end + 1;
+      continue;
+    }
+    if (c === '$' && command[j + 1] === "'") {
+      let k = j + 2;
+      while (k < command.length && command[k] !== "'") {
+        if (command[k] === '\\' && k + 1 < command.length) {
+          word += command[k + 1];
+          k += 2;
+        } else {
+          word += command[k];
+          k += 1;
+        }
+      }
+      quoted = true;
+      j = k + 1;
+      continue;
+    }
+    if (c === '"') {
+      let k = j + 1;
+      while (k < command.length && command[k] !== '"') {
+        if (
+          command[k] === '\\' &&
+          k + 1 < command.length &&
+          DQ_ESCAPABLE.has(command[k + 1] as string)
+        ) {
+          word += command[k + 1];
+          k += 2;
+        } else {
+          word += command[k];
+          k += 1;
+        }
+      }
+      quoted = true;
+      j = k + 1;
+      continue;
+    }
+    if (DELIMITER_STOP.has(c)) break;
+    word += c;
+    j += 1;
+  }
+  if (word === '') return null;
+  return { length: Math.min(j, command.length) - at, delimiter: word, quoted, stripTabs };
+}
+
+/** Options for {@link normalizeForScan}. */
+export interface NormalizeOptions {
+  /**
+   * The text is an unquoted heredoc body: no quoting or comment rule applies,
+   * so every backslash-newline is a continuation (an escaped `\\` aside) and
+   * no `$'…'` is special.
+   */
+  heredocBody?: boolean;
+}
+
+/**
+ * Normalise a text for the raw substitution, backtick and heredoc scanners as
+ * the shell's own reading would (mmnto-ai/totem#3106): (a) a backslash-newline
+ * (LF or CRLF) outside single quotes is removed, as bash removes a line
+ * continuation, with `\\` before a newline kept as an escaped backslash; (b)
+ * the contents of an ANSI-C `$'…'` string are blanked length-preservingly (the
+ * `$'` and the closing `'` stay), so no quote inside one is seen by a later
+ * scanner. Single-quoted text and comments are copied unchanged, with the
+ * tokenizer's quote, comment and ANSI-C state. Not used by the shield's own
+ * rows.
+ */
+export function normalizeForScan(text: string, opts: NormalizeOptions = {}): string {
+  let out = '';
+  let inDouble = false;
+  let boundary = true;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i] as string;
+    if (ch === '\\') {
+      if (text[i + 1] === '\n') {
+        i += 2;
+        continue;
+      }
+      if (text[i + 1] === '\r' && text[i + 2] === '\n') {
+        i += 3;
+        continue;
+      }
+      out += ch + (text[i + 1] ?? '');
+      i += 2;
+      boundary = false;
+      continue;
+    }
+    if (opts.heredocBody === true) {
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '"') inDouble = false;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      const close = text.indexOf("'", i + 1);
+      const end = close === -1 ? text.length : close + 1;
+      out += text.slice(i, end);
+      i = end;
+      boundary = false;
+      continue;
+    }
+    if (ch === '$' && text[i + 1] === "'") {
+      let k = i + 2;
+      let blanked = '';
+      while (k < text.length && text[k] !== "'") {
+        if (text[k] === '\\' && k + 1 < text.length) {
+          blanked += text[k + 1] === '\n' ? ' \n' : '  ';
+          k += 2;
+        } else {
+          blanked += text[k] === '\n' ? '\n' : ' ';
+          k += 1;
+        }
+      }
+      out += "$'" + blanked + (k < text.length ? "'" : '');
+      i = k + 1;
+      boundary = false;
+      continue;
+    }
+    if (ch === '#' && boundary) {
+      const nl = text.indexOf('\n', i);
+      const end = nl === -1 ? text.length : nl;
+      out += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (ch === '"') inDouble = true;
+    out += ch;
+    boundary = WORD_BOUNDARY.has(ch) || ch === '(';
+    i += 1;
+  }
+  return out;
 }
 
 /**

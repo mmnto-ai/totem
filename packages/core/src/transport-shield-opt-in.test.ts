@@ -73,10 +73,14 @@ describe("the shield's own call sites pass no opt-in option", () => {
     expect(callArguments('backtickBodies')).toEqual(['text, coveredAt']);
   });
 
-  it('tokenizeShell and findHeredocs never receive literalBackslash or joinContinuations', () => {
+  it('tokenizeShell and findHeredocs never receive literalBackslash, joinContinuations or bashDelimiters', () => {
     for (const args of [...callArguments('tokenizeShell'), ...callArguments('findHeredocs')]) {
-      expect(args).not.toMatch(/literalBackslash|joinContinuations/);
+      expect(args).not.toMatch(/literalBackslash|joinContinuations|bashDelimiters/);
     }
+  });
+
+  it('the shield never calls normalizeForScan', () => {
+    expect(callArguments('normalizeForScan')).toEqual([]);
   });
 
   it('no option name of the opt-in set appears as an object key outside its definition', () => {
@@ -86,6 +90,8 @@ describe("the shield's own call sites pass no opt-in option", () => {
       'skipRedirections',
       'literalBackslash',
       'joinContinuations',
+      'bashDelimiters',
+      'heredocBody',
       'backslash',
     ]) {
       const uses = [...SOURCE.matchAll(new RegExp(`\\b${key}\\s*:`, 'g'))];
