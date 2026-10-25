@@ -10,6 +10,12 @@
  * shell script on PATH, which Windows CreateProcess cannot resolve — the
  * ubuntu/macos CI legs carry this coverage, the string assertions carry win32).
  *
+ * Since mmnto-ai/totem#3048 both diff-reading steps of the hook grade the pushed
+ * range: the lint step probes `lint --help` for `--branch` and runs `lint --branch`
+ * (bare `lint` behind a visible compat line when absent), and the gate-mapped
+ * review form carries `--branch` under the existing `--gate` probe. Both are
+ * pinned structurally and, on POSIX, behaviorally with the stub below.
+ *
  * Byte-parity between this template and `tools/pre-push` is enforced by
  * `tools-hook-parity.test.ts` — not duplicated here.
  */
@@ -40,7 +46,7 @@ describe('buildPrePushHook — gate-mapped strict arm (structural, all platforms
   });
 
   it('carries the gate-mapped invocation, the visible compat fallback, and the bare form — in that order', () => {
-    const gateIdx = hook.indexOf('$TOTEM_CMD review --gate || exit 1');
+    const gateIdx = hook.indexOf('$TOTEM_CMD review --gate --branch || exit 1');
     const compatIdx = hook.indexOf('Hook running review in compat mode');
     const bareIdx = hook.indexOf('$TOTEM_CMD review || exit 1');
     expect(gateIdx).toBeGreaterThan(-1);
@@ -48,6 +54,33 @@ describe('buildPrePushHook — gate-mapped strict arm (structural, all platforms
     expect(bareIdx).toBeGreaterThan(compatIdx);
     // The compat disclosure is stderr-routed (a hook's stdout can be swallowed).
     expect(hook).toMatch(/Hook running review in compat mode[^\n]*" >&2/);
+  });
+
+  // mmnto-ai/totem#3048: the lint step grades the pushed range too. A pre-fix
+  // render carries the bare `lint` line only and none of the four below.
+  it('the lint step probes lint --help for --branch, runs lint --branch, and keeps the bare form behind a visible compat line — in that order, before the shield arm', () => {
+    const probeIdx = hook.indexOf(
+      `if $TOTEM_CMD lint --help 2>/dev/null | grep -q -- '--branch'; then`,
+    );
+    const branchIdx = hook.indexOf('if ! $TOTEM_CMD lint --branch; then');
+    const compatIdx = hook.indexOf('Hook running lint in compat mode');
+    const bareIdx = hook.indexOf('if ! $TOTEM_CMD lint; then');
+    expect(probeIdx).toBeGreaterThan(-1);
+    expect(branchIdx).toBeGreaterThan(probeIdx);
+    expect(compatIdx).toBeGreaterThan(branchIdx);
+    expect(bareIdx).toBeGreaterThan(compatIdx);
+    expect(hook).toMatch(/Hook running lint in compat mode[^\n]*" >&2/);
+    expect(bareIdx).toBeLessThan(hook.indexOf('$TOTEM_CMD review --gate --branch || exit 1'));
+  });
+
+  it('each diff-reading verb appears once in its forced form and once in its compat arm, nowhere else', () => {
+    const count = (needle: string): number => hook.split(needle).length - 1;
+    expect(count('$TOTEM_CMD lint --branch')).toBe(1);
+    expect(count('if ! $TOTEM_CMD lint; then')).toBe(1);
+    expect(count('$TOTEM_CMD review --gate --branch')).toBe(1);
+    expect(count('$TOTEM_CMD review || exit 1')).toBe(1);
+    // No bare `review --gate` survives outside the forced form.
+    expect(count('$TOTEM_CMD review --gate ')).toBe(1);
   });
 });
 
@@ -88,8 +121,18 @@ describe.skipIf(process.platform === 'win32')('pre-push gate matrix (POSIX behav
    * strict when the CLI lacks the verb. The stub models a CLI that HAS it and
    * answers "not owed" (exit 0), so the shield arm stays the only live block;
    * the legs arm's own matrix lives in install-hooks.test.ts.
+   *
+   * The lint step (mmnto-ai/totem#3048) is armed only by `armLint()` below:
+   * `lintHelpText` is what `lint --help` prints (the probe greps it for
+   * `--branch`) and `lintExit` is every other `lint` invocation's exit.
    */
-  function writeStub(params: { helpText: string; helpExit: number; reviewExit: number }): void {
+  function writeStub(params: {
+    helpText: string;
+    helpExit: number;
+    reviewExit: number;
+    lintHelpText?: string;
+    lintExit?: number;
+  }): void {
     const stub = `#!/bin/sh
 printf '%s\\n' "$*" >> "${logPath}"
 if [ "$1" = "doctor" ]; then exit 0; fi
@@ -101,6 +144,11 @@ if [ "$1" = "legs" ]; then
   printf '%s\\n' '[Totem] legs: not owed — no changed path matched hooks.legsOwed.globs (0 globs; head 00000000)'
   exit 0
 fi
+if [ "$1" = "lint" ] && [ "$2" = "--help" ]; then
+  printf '%s\\n' '${params.lintHelpText ?? ''}'
+  exit 0
+fi
+if [ "$1" = "lint" ]; then exit ${params.lintExit ?? 0}; fi
 if [ "$1" = "review" ] && [ "$2" = "--help" ]; then
   cat <<'TOTEM_STUB_HELP'
 ${params.helpText}
@@ -129,7 +177,18 @@ exit 0
   const invocations = () =>
     fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8').trim().split('\n') : [];
 
-  it('supported --gate: invokes the gate-mapped form and passes', () => {
+  /**
+   * Arms the lint step and nothing else: `compiled-rules.json` is the file test
+   * the lint block reads, and the other gates that share it (verify-badges, the
+   * claim-discipline walk) also need a README.md, AGENTS.md, design-tenets.md or
+   * docs/wiki, none of which the bare repo dir has.
+   */
+  function armLint(): void {
+    fs.mkdirSync(path.join(repoDir, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(repoDir, '.totem', 'compiled-rules.json'), '[]');
+  }
+
+  it('supported --gate: invokes the gate-mapped form over the pushed range and passes', () => {
     writeStub({
       helpText: 'Usage: totem review\n  --gate  declared mapping',
       helpExit: 0,
@@ -137,7 +196,7 @@ exit 0
     });
     const result = runHook();
     expect(result.status).toBe(0);
-    expect(invocations()).toContain('review --gate');
+    expect(invocations()).toContain('review --gate --branch');
     expect(invocations()).toContain('doctor --strict');
     expect(result.stderr).not.toContain('compat mode');
   });
@@ -151,6 +210,7 @@ exit 0
     const result = runHook();
     expect(result.status).toBe(0);
     expect(invocations()).toContain('review');
+    expect(invocations()).not.toContain('review --gate --branch');
     expect(invocations()).not.toContain('review --gate');
     expect(result.stderr).toContain('compat mode');
   });
@@ -160,6 +220,7 @@ exit 0
     const result = runHook();
     expect(result.status).toBe(0);
     expect(invocations()).toContain('review');
+    expect(invocations()).not.toContain('review --gate --branch');
     expect(invocations()).not.toContain('review --gate');
     expect(result.stderr).toContain('compat mode');
   });
@@ -168,6 +229,57 @@ exit 0
     writeStub({ helpText: '  --gate', helpExit: 0, reviewExit: 3 });
     const result = runHook();
     expect(result.status).toBe(1);
-    expect(invocations()).toContain('review --gate');
+    expect(invocations()).toContain('review --gate --branch');
+  });
+
+  // The lint step (mmnto-ai/totem#3048). On a pre-fix render the first case
+  // logs a bare `lint` and never `lint --branch`; the second never prints the
+  // compat line; the third still blocks, but on `lint`, not `lint --branch`.
+  it('lint: a CLI whose help names --branch is run with --branch and never bare, no compat line', () => {
+    armLint();
+    writeStub({
+      helpText: '  --gate',
+      helpExit: 0,
+      reviewExit: 0,
+      lintHelpText: '  --branch  Force the branch-vs-base diff scope the pre-push gate checks',
+    });
+    const result = runHook();
+    expect(result.status).toBe(0);
+    expect(invocations()).toContain('lint --help');
+    expect(invocations()).toContain('lint --branch');
+    expect(invocations()).not.toContain('lint');
+    expect(result.stderr).not.toContain('compat mode');
+  });
+
+  it('lint: a CLI without --branch runs the bare form behind a VISIBLE compat line that names the working tree', () => {
+    armLint();
+    writeStub({
+      helpText: '  --gate',
+      helpExit: 0,
+      reviewExit: 0,
+      lintHelpText: '  --staged  Lint only staged changes',
+    });
+    const result = runHook();
+    expect(result.status).toBe(0);
+    expect(invocations()).toContain('lint');
+    expect(invocations()).not.toContain('lint --branch');
+    expect(result.stderr).toMatch(
+      /Hook running lint in compat mode \(CLI without --branch\): the working tree is linted, not the pushed range/,
+    );
+  });
+
+  it('lint: a failing lint --branch blocks the push before the shield arm runs', () => {
+    armLint();
+    writeStub({
+      helpText: '  --gate',
+      helpExit: 0,
+      reviewExit: 0,
+      lintHelpText: '  --branch',
+      lintExit: 1,
+    });
+    const result = runHook();
+    expect(result.status).toBe(1);
+    expect(invocations()).toContain('lint --branch');
+    expect(invocations()).not.toContain('review --gate --branch');
   });
 });
