@@ -2,9 +2,9 @@
  * Pre-push hook gate-mapped review invocation tests (mmnto-ai/totem#2473).
  *
  * The managed pre-push hook's strict arm consumes the gate-mapped review form:
- * probe `review --help` for `--gate` support, invoke `review --gate` when
- * present, fall back to the bare sensor form with a VISIBLE compat line when
- * absent (the `--scope-to-diff` defensive-degrade precedent). Structural
+ * probe `review --help` for `--gate` support, invoke `review --gate --branch`
+ * when present, fall back to the bare sensor form with a VISIBLE compat line
+ * when absent (the `--scope-to-diff` defensive-degrade precedent). Structural
  * assertions cover every platform; the behavioral matrix executes the real
  * generated hook under `sh` with a stub CLI and is POSIX-only (the stub is a
  * shell script on PATH, which Windows CreateProcess cannot resolve — the
@@ -54,6 +54,11 @@ describe('buildPrePushHook — gate-mapped strict arm (structural, all platforms
     expect(bareIdx).toBeGreaterThan(compatIdx);
     // The compat disclosure is stderr-routed (a hook's stdout can be swallowed).
     expect(hook).toMatch(/Hook running review in compat mode[^\n]*" >&2/);
+    // Its wording names what a bare run reads (mmnto-ai/totem#3048); the
+    // pre-fix line said only that the mapping was off.
+    expect(hook).toContain(
+      'Hook running review in compat mode (CLI without --gate): the declared gate mapping and the push-range scope are both off, so this run reads uncommitted edits first and the branch diff only on a clean tree',
+    );
   });
 
   // mmnto-ai/totem#3048: the lint step grades the pushed range too. A pre-fix
@@ -70,6 +75,9 @@ describe('buildPrePushHook — gate-mapped strict arm (structural, all platforms
     expect(compatIdx).toBeGreaterThan(branchIdx);
     expect(bareIdx).toBeGreaterThan(compatIdx);
     expect(hook).toMatch(/Hook running lint in compat mode[^\n]*" >&2/);
+    expect(hook).toContain(
+      'Hook running lint in compat mode (CLI without --branch): this run reads uncommitted edits first and the branch diff only on a clean tree, not the pushed range',
+    );
     expect(bareIdx).toBeLessThan(hook.indexOf('$TOTEM_CMD review --gate --branch || exit 1'));
   });
 
@@ -251,7 +259,7 @@ exit 0
     expect(result.stderr).not.toContain('compat mode');
   });
 
-  it('lint: a CLI without --branch runs the bare form behind a VISIBLE compat line that names the working tree', () => {
+  it('lint: a CLI without --branch runs the bare form behind a VISIBLE compat line that names what a bare run reads', () => {
     armLint();
     writeStub({
       helpText: '  --gate',
@@ -264,7 +272,7 @@ exit 0
     expect(invocations()).toContain('lint');
     expect(invocations()).not.toContain('lint --branch');
     expect(result.stderr).toMatch(
-      /Hook running lint in compat mode \(CLI without --branch\): the working tree is linted, not the pushed range/,
+      /Hook running lint in compat mode \(CLI without --branch\): this run reads uncommitted edits first and the branch diff only on a clean tree, not the pushed range/,
     );
   });
 

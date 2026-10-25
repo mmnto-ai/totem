@@ -89,6 +89,10 @@ export async function runEstimate(
     // when the diff actually came from an explicit range
     // (mmnto-ai/totem#1732 CR R2).
     isStaged: diffResult.source === 'staged',
+    // The same rule for HEAD (mmnto-ai/totem#3048): a branch-vs-base diff has
+    // its AST and file-scoped checks read HEAD's bytes, as `totem lint` does on
+    // that scope, so the forecast and the gate judge the same content.
+    readFromHead: diffResult.source === 'branch-vs-base',
   });
 
   // Pattern-history overlay — opt out via `--no-history`

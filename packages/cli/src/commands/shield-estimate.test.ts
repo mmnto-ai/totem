@@ -281,6 +281,28 @@ describe('runEstimate', () => {
     },
   );
 
+  // mmnto-ai/totem#3048 — the branch-vs-base scope reads HEAD's bytes for AST
+  // and file-scoped checks, as `totem lint` does on that scope; no other source
+  // does. A pre-fix estimator never sets the field.
+  it.each([
+    ['uncommitted', false] as const,
+    ['branch-vs-base', true] as const,
+    ['explicit-range', false] as const,
+    ['staged', false] as const,
+  ])(
+    'readFromHead is true iff resolved source is "branch-vs-base" (source=%s → readFromHead=%s)',
+    async (source, expected) => {
+      mockGetDiffForReview.mockResolvedValue(diffResult({ source }));
+      mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());
+
+      const { runEstimate } = await import('./shield-estimate.js');
+      await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+      const rcrArgs = mockRunCompiledRules.mock.calls[0]![0];
+      expect(rcrArgs.readFromHead).toBe(expected);
+    },
+  );
+
   it('forwards options.out as outPath into runCompiledRules', async () => {
     mockGetDiffForReview.mockResolvedValue(diffResult());
     mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());

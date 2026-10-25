@@ -1017,6 +1017,167 @@ describe('runCompiledRules', () => {
       mockExec.mockRestore();
     });
 
+    // ─── mmnto-ai/totem#3048 — the branch-vs-base scope reads HEAD's bytes ──
+    //
+    // The disk and HEAD are made to DISAGREE so only the source that decides
+    // can produce the observed verdict. Before this option existed the worktree
+    // was read under every non-staged scope: (a) passed and (b) fired, which is
+    // exactly the pre-push defect — an unsaved edit hid a pushed violation, or
+    // blocked a push whose commits were clean.
+    describe('readFromHead (the branch-vs-base scope)', () => {
+      const FOO = '// context\n  console.log("foo");\n// context\n';
+      const BAR = '// context\n  console.log("bar");\n// context\n';
+
+      function fooRule(): CompiledRule {
+        return makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        });
+      }
+
+      /** Writes the disk copy; serves HEAD's copy (and the index's) through the git mock. */
+      function divergence(params: {
+        disk: string;
+        head: string;
+        headMode?: string;
+        showThrows?: boolean;
+      }) {
+        fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), params.disk);
+        const calls: string[] = [];
+        const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+        const mockExec = vi
+          .spyOn(totem, 'safeExec')
+          .mockImplementation((_cmd: string, args?: string[]) => {
+            if (!args) return '';
+            calls.push(args.join(' '));
+            if (args[0] === 'ls-tree' && args[1] === 'HEAD') {
+              return `${params.headMode ?? '100644'} blob hash\tsrc/app.ts\n`;
+            }
+            if (args[0] === 'ls-files' && args[1] === '-s') {
+              return '100644 hash 0\tsrc/app.ts\n';
+            }
+            if (args[0] === 'show') {
+              if (params.showThrows) throw new Error('[Totem Error] Command failed: show');
+              return params.head;
+            }
+            return '';
+          });
+        return {
+          calls,
+          restore: () => {
+            mockResolveGitRoot.mockRestore();
+            mockExec.mockRestore();
+          },
+        };
+      }
+
+      async function violationCount(opts: {
+        readFromHead?: boolean;
+        isStaged?: boolean;
+      }): Promise<number> {
+        try {
+          const result = await runCompiledRules({
+            diff: makeDiff('src/app.ts', '  console.log("foo");'),
+            cwd: tmpDir,
+            totemDir: TOTEM_DIR,
+            format: 'json',
+            tag: 'Test',
+            ...opts,
+          });
+          return result.violations.length;
+        } catch (err: unknown) {
+          if (
+            err instanceof Error &&
+            err.name === 'TotemError' &&
+            err.message.includes('Violations detected')
+          ) {
+            return 1;
+          }
+          throw err;
+        }
+      }
+
+      it('(a) FIRES on a violation HEAD carries that an unsaved edit removed from disk, reading the blob by path from HEAD', async () => {
+        writeRules(tmpDir, [fooRule()]);
+        const { calls, restore } = divergence({ disk: BAR, head: FOO });
+        try {
+          expect(await violationCount({ readFromHead: true })).toBe(1);
+          expect(calls.includes('ls-tree HEAD -- src/app.ts')).toBe(true);
+          expect(calls.includes('show HEAD:src/app.ts')).toBe(true);
+          expect(calls.some((c) => c.startsWith('ls-files'))).toBe(false);
+        } finally {
+          restore();
+        }
+      });
+
+      it('(b) stays SILENT on a violation only the disk carries, so an unsaved edit cannot block a clean push', async () => {
+        writeRules(tmpDir, [fooRule()]);
+        const { restore } = divergence({ disk: FOO, head: BAR });
+        try {
+          expect(await violationCount({ readFromHead: true })).toBe(0);
+        } finally {
+          restore();
+        }
+      });
+
+      it('reads the disk when neither blob option is set — the same fixtures then fire on the disk copy', async () => {
+        writeRules(tmpDir, [fooRule()]);
+        const { restore } = divergence({ disk: FOO, head: BAR });
+        try {
+          expect(await violationCount({})).toBe(1);
+        } finally {
+          restore();
+        }
+      });
+
+      it('isStaged wins when both are set: the index is read, never HEAD', async () => {
+        writeRules(tmpDir, [fooRule()]);
+        const { calls, restore } = divergence({ disk: BAR, head: FOO });
+        try {
+          expect(await violationCount({ readFromHead: true, isStaged: true })).toBe(1);
+          expect(calls.includes('show :src/app.ts')).toBe(true);
+          expect(calls.includes('show HEAD:src/app.ts')).toBe(false);
+          expect(calls.some((c) => c.startsWith('ls-tree'))).toBe(false);
+        } finally {
+          restore();
+        }
+      });
+
+      it('skips a symlink at HEAD (mode 120000) without reading its blob', async () => {
+        writeRules(tmpDir, [fooRule()]);
+        const { calls, restore } = divergence({ disk: FOO, head: FOO, headMode: '120000' });
+        try {
+          expect(await violationCount({ readFromHead: true })).toBe(0);
+          expect(calls.some((c) => c.startsWith('show '))).toBe(false);
+        } finally {
+          restore();
+        }
+      });
+
+      it('throws HEAD_READ_FAILED when git show HEAD:<file> fails — never a silent disk fallback', async () => {
+        writeRules(tmpDir, [fooRule()]);
+        const { restore } = divergence({ disk: BAR, head: FOO, showThrows: true });
+        try {
+          const run = runCompiledRules({
+            diff: makeDiff('src/app.ts', '  console.log("foo");'),
+            cwd: tmpDir,
+            totemDir: TOTEM_DIR,
+            format: 'json',
+            tag: 'Test',
+            readFromHead: true,
+          });
+          await expect(run).rejects.toMatchObject({
+            name: 'TotemError',
+            code: 'HEAD_READ_FAILED',
+          });
+          await expect(run).rejects.toThrow('Failed to read HEAD content for src/app.ts');
+        } finally {
+          restore();
+        }
+      });
+    });
+
     it('throws STAGED_READ_FAILED when the underlying staged read fails', async () => {
       const rules = [
         makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {

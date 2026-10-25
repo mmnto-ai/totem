@@ -56,6 +56,17 @@ export interface RunCompiledRulesOptions {
   /** True if we are linting staged changes only */
   isStaged?: boolean;
   /**
+   * Read file content for AST and file-scoped checks from the HEAD blob
+   * (`git show HEAD:<file>`) instead of the worktree (mmnto-ai/totem#3048).
+   * Set for the branch-vs-base scope — forced by `--branch` / `--base` or
+   * reached by the clean-tree fallback — whose diff is `<base>...HEAD`: the
+   * bytes judged are then the commits being pushed, so an unsaved edit can
+   * neither hide a pushed violation nor block a clean push. `isStaged` wins
+   * when a caller sets both. A failed read is `HEAD_READ_FAILED`, never a
+   * silent worktree fallback.
+   */
+  readFromHead?: boolean;
+  /**
    * Bounded regex execution timeout mode (mmnto-ai/totem#1641). `strict`
    * (default) surfaces regex timeouts as lint errors that contribute to
    * the non-zero exit code. `lenient` skips the timing-out rule-file pair
@@ -372,6 +383,7 @@ export async function runCompiledRules(
     ignorePatterns,
     tag,
     isStaged,
+    readFromHead,
     regexTimeoutMode,
     astParseMode,
   } = options;
@@ -606,21 +618,47 @@ export async function runCompiledRules(
       );
     }
   };
-  // Staged-content reader, hoisted above BOTH dispatchers (Prop 310 slice 2,
-  // falsification round 2026-08-21). It was previously defined inside the AST
-  // block, so the regex path had no way to reach it — and a Prop 310
-  // `requires: {scope: file}` check evaluated there would have read the WORKTREE
-  // while `--staged` was judging the index. That is fail-open in the direction
-  // that matters: a required context deleted in the staged edit but still on
-  // disk would satisfy the requirement and let the staged violation through the
-  // pre-commit gate. One reader, both paths, same bytes.
-  let stagedReadStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
-  if (isStaged && repoRoot) {
-    stagedReadStrategy = async (filePath: string) => {
+  // Blob reader for AST and file-scoped checks, hoisted above BOTH dispatchers
+  // (Prop 310 slice 2, falsification round 2026-08-21). It was previously
+  // defined inside the AST block, so the regex path had no way to reach it — and
+  // a Prop 310 `requires: {scope: file}` check evaluated there would have read
+  // the WORKTREE while `--staged` was judging the index. That is fail-open in
+  // the direction that matters: a required context deleted in the staged edit
+  // but still on disk would satisfy the requirement and let the staged violation
+  // through the pre-commit gate. One reader, both paths, same bytes.
+  //
+  // Two blob sources (mmnto-ai/totem#3048): the index under `--staged`
+  // (`git show :<file>`) and HEAD under the branch-vs-base scope
+  // (`git show HEAD:<file>`), whose diff is `<base>...HEAD` — the bytes judged
+  // are then the commits being pushed, so an unsaved edit can neither hide a
+  // pushed violation nor block a clean push. `isStaged` wins when a caller sets
+  // both. Outside both, the strategy stays undefined and the worktree is read.
+  const blobSource = isStaged
+    ? {
+        ref: '',
+        probe: ['ls-files', '-s'],
+        code: 'STAGED_READ_FAILED' as const,
+        noun: 'staged',
+        cure: 'The file may not exist in the index or may be staged for deletion. Ensure --staged is used correctly.',
+      }
+    : readFromHead
+      ? {
+          ref: 'HEAD',
+          probe: ['ls-tree', 'HEAD'],
+          code: 'HEAD_READ_FAILED' as const,
+          noun: 'HEAD',
+          cure: 'The file may not exist at HEAD. The branch-vs-base scope judges the commits being pushed, read from the checked-out HEAD.',
+        }
+      : undefined;
+  let blobReadStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
+  if (blobSource !== undefined && repoRoot) {
+    const { ref, probe, code, noun, cure } = blobSource;
+    blobReadStrategy = async (filePath: string) => {
       try {
-        // 1. Detect symlinks explicitly (git ls-files -s returns mode 120000).
-        //    The `--` separator prevents filePath values starting with `-` from
-        //    being interpreted as git options.
+        // 1. Detect symlinks explicitly: `git ls-files -s` (the index) and
+        //    `git ls-tree HEAD` (HEAD) both print mode 120000 for one. The `--`
+        //    separator prevents filePath values starting with `-` from being
+        //    interpreted as git options.
         //
         //    `--recurse-submodules` is deliberately ABSENT: combining it with
         //    `-s` requires Git ≥2.36, this project declares no minimum Git
@@ -630,7 +668,7 @@ export async function runCompiledRules(
         //    read by `git show :<file>` below, which the flag does not affect,
         //    so its only role was this symlink probe. Do not re-add it without
         //    also declaring a minimum Git version.
-        const lsOutput = safeExec('git', ['ls-files', '-s', '--', filePath], {
+        const lsOutput = safeExec('git', [...probe, '--', filePath], {
           cwd: repoRoot,
           env: { ...process.env, LC_ALL: 'C' },
         });
@@ -638,23 +676,23 @@ export async function runCompiledRules(
           return null; // Explicitly exclude symlinks from AST checks
         }
 
-        // 2. Read staged content
-        const content = safeExec('git', ['show', `:${filePath}`], {
+        // 2. Read the blob (the index when `ref` is empty, else HEAD)
+        const content = safeExec('git', ['show', `${ref}:${filePath}`], {
           cwd: repoRoot,
           trim: false,
           env: { ...process.env, LC_ALL: 'C' },
         });
 
-        // 3. Normalize CRLF to LF specifically for the staged callback
+        // 3. Normalize CRLF to LF specifically for the blob callback
         // totem-context: Invariant #4 refers to an internal invariant number, not an issue ref
         // Disk-read callback preserves existing behavior per Invariant #4.
         return content.replace(/\r\n/g, '\n');
       } catch (err) {
         // Explicit throw per Failure Mode 1 decision
         throw new TotemError(
-          'STAGED_READ_FAILED',
-          `Failed to read staged content for ${filePath}`,
-          `git show :${filePath} failed. The file may not exist in the index or may be staged for deletion. Ensure --staged is used correctly.`,
+          code,
+          `Failed to read ${noun} content for ${filePath}`,
+          `git show ${ref}:${filePath} failed. ${cure}`,
           { cause: err },
         );
       }
@@ -674,9 +712,10 @@ export async function runCompiledRules(
         timeoutMode: effectiveTimeoutMode,
         repoRoot: repoRoot ?? cwd,
         // Prop 310 § Design 8 — a file-scoped requirement reads the same bytes
-        // the lint is judging (the index under `--staged`, the worktree
-        // otherwise). Undefined outside staged mode ⇒ worktree read.
-        readStrategy: stagedReadStrategy,
+        // the lint is judging (the index under `--staged`, HEAD under the
+        // branch-vs-base scope, the worktree otherwise). Undefined outside both
+        // blob modes ⇒ worktree read.
+        readStrategy: blobReadStrategy,
       },
       ruleEventCallback,
     );
@@ -704,7 +743,7 @@ export async function runCompiledRules(
     try {
       const workingDirectory = repoRoot ?? cwd;
       // Defined once above both dispatchers — see the hoist comment there.
-      const readStrategy = stagedReadStrategy;
+      const readStrategy = blobReadStrategy;
 
       astViolations = await applyAstRulesToAdditions(
         ruleCtx,
@@ -716,9 +755,13 @@ export async function runCompiledRules(
         readStrategy,
       );
     } catch (err) {
-      // STAGED_READ_FAILED must propagate — the pre-commit guarantee depends
-      // on surfacing staged-read failures rather than silently falling back.
-      if (err instanceof TotemError && err.code === 'STAGED_READ_FAILED') {
+      // STAGED_READ_FAILED and HEAD_READ_FAILED must propagate — the pre-commit
+      // and pre-push guarantees depend on surfacing a failed blob read rather
+      // than silently falling back to the worktree.
+      if (
+        err instanceof TotemError &&
+        (err.code === 'STAGED_READ_FAILED' || err.code === 'HEAD_READ_FAILED')
+      ) {
         throw err;
       }
       const msg = err instanceof Error ? err.message : String(err);

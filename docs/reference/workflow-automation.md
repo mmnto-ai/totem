@@ -44,7 +44,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 **What should happen:** Format, lint, review — cheapest checks first.
 **Commands:** `pnpm run format:check`, `totem lint`, `totem review`
 **Skill:** `/prepush`
-**Hook:** the review gate runs in the pre-push Git hook on the strict tier (`totem review --gate --branch`, the shield gate over the pushed range). No `PreToolUse` hook gates `git push`.
+**Hook:** the review gate runs in the pre-push Git hook on the strict tier (`totem review --gate --branch`, the shield gate over the checked-out `HEAD`'s branch-vs-base diff). No `PreToolUse` hook gates `git push`.
 
 ### Phase 6: After PR Merge
 

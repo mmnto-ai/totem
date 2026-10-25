@@ -11,7 +11,7 @@ totem hook install
 ## Supported Hooks
 
 - **`pre-commit`**: Fast checks for obvious violations.
-- **`pre-push`**: Fast, local `totem lint --branch` before pushing to a remote: the branch-vs-base diff the push carries, whatever the working tree holds uncommitted (mmnto-ai/totem#3048; the strict tier's shield step, `totem review --gate --branch`, reads the same range). Plus the review-leg floor — `totem legs gate` refuses a legs-owed push that carries no fresh falsification-leg deposit on the strict tier, on agent seats, and wherever `hooks.legsOwed.enforce` is `'block'`; the other tiers print the same lines and pass (see [Enforcement Model](enforcement-model.md)).
+- **`pre-push`**: Fast, local `totem lint --branch` before pushing to a remote, where `compiled-rules.json` exists: `HEAD`'s branch-vs-base diff, with AST and file-scoped checks reading `HEAD`'s bytes, whatever the working tree holds uncommitted (mmnto-ai/totem#3048; the strict tier's shield step, `totem review --gate --branch`, grades the same diff). The range is the checked-out `HEAD`'s, not the ref list git hands the hook (mmnto-ai/totem#2793), and a CLI without the flag runs bare `totem lint` behind a stderr line that says so. Plus the review-leg floor — `totem legs gate` refuses a legs-owed push that carries no fresh falsification-leg deposit on the strict tier, on agent seats, and wherever `hooks.legsOwed.enforce` is `'block'`; the other tiers print the same lines and pass (see [Enforcement Model](enforcement-model.md)).
 - **`post-merge` / `post-checkout`**: Re-syncs the local LanceDB index if lessons or rules have changed.
 
 ## The managed block and your own extensions
