@@ -74,9 +74,10 @@ const MAX_DISCLOSED_CHANGED_FILES = 12;
  * `-z` is load-bearing, not a style choice (mmnto-ai/totem#2698 fold 4). Under
  * git's default `core.quotePath=true`, `--name-only` C-QUOTES any path with a
  * non-ASCII byte, a quote or a backslash — `docs/caf\303\251.md` — while the
- * owed set comes from `extractChangedFiles`, which is unquoted. The two sets
- * then never intersect for such a path, and a covering ancestor is rejected
- * with the false reason "predates every owed change". `-z` emits raw
+ * owed set comes from `extractChangedFiles`, which strips the quotes (and,
+ * since mmnto-ai/totem#3048, decodes the escapes to the real name). The two
+ * sets then never intersect for such a path, and a covering ancestor is
+ * rejected with the false reason "predates every owed change". `-z` emits raw
  * NUL-separated names and never quotes, so both sides speak one spelling.
  *
  * One helper, taking the runner: the gate shells out through `safeExec` and the
@@ -887,10 +888,11 @@ export async function resolveUnfilteredBranchScope(
   // `getDiffForReview` still resolves the BASE (its origin-preference logic is
   // the one this gate must agree with) and still rules on the empty-diff case,
   // but its narration is ALWAYS suppressed: its `Changed files` line is built
-  // from `extractChangedFiles`, which spells a non-ASCII path the C-quoted way,
-  // and this module prints the RAW list below. Letting both speak printed the
-  // same line twice, in two different spellings (caught on this branch's own
-  // gate run, mmnto-ai/totem#2698 fold 5).
+  // from `extractChangedFiles`, which until mmnto-ai/totem#3048 spelled a
+  // non-ASCII path the C-quoted way (it decodes now), and this module prints the
+  // RAW list below. Letting both speak printed the same line twice, once in two
+  // different spellings (caught on this branch's own gate run,
+  // mmnto-ai/totem#2698 fold 5); one list, printed once, stays the rule.
   const result = await getDiffForReview(
     { branch: true, suppressScopeNarration: true },
     { ignorePatterns: [], shieldIgnorePatterns: [] },

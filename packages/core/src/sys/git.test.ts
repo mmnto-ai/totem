@@ -366,6 +366,28 @@ describe('filterDiffByPatterns', () => {
     const result = filterDiffByPatterns(DIFF_WITH_STRATEGY, ['.strategy']);
     expect(result.trim()).toBe('');
   });
+
+  it('matches an ignore glob against the decoded name of a quoted destination, on either quoting shape (mmnto-ai/totem#3048)', () => {
+    const quotedBoth = [
+      'diff --git "a/src/caf\\303\\251.ts" "b/src/caf\\303\\251.ts"',
+      '--- "a/src/caf\\303\\251.ts"',
+      '+++ "b/src/caf\\303\\251.ts"',
+      '@@ -1 +1 @@',
+      '+const x = 1;',
+    ].join('\n');
+    const renamedToQuoted = [
+      'diff --git a/src/big.ts "b/src/caf\\303\\251.ts"',
+      'rename from src/big.ts',
+      'rename to "src/caf\\303\\251.ts"',
+      '+++ "b/src/caf\\303\\251.ts"',
+      '@@ -1 +1 @@',
+      '+const y = 2;',
+    ].join('\n');
+    expect(filterDiffByPatterns(quotedBoth, ['src/café.ts']).trim()).toBe('');
+    expect(filterDiffByPatterns(renamedToQuoted, ['src/café.ts']).trim()).toBe('');
+    // The escaped spelling never matches: the glob meets the real name only.
+    expect(filterDiffByPatterns(quotedBoth, ['src/caf\\303\\251.ts'])).toBe(quotedBoth);
+  });
 });
 
 describe('isFileDirty', () => {
@@ -462,6 +484,17 @@ describe('extractChangedFiles', () => {
     const diff =
       'diff --git "a/src/caf\\303\\251.ts" "b/src/caf\\303\\251.ts"\n+++ "b/src/caf\\303\\251.ts"';
     expect(extractChangedFiles(diff)).toEqual(['src/café.ts']);
+  });
+
+  it('reads a line where only one side is quoted — a rename to or from a non-ASCII name (mmnto-ai/totem#3048 read 3)', () => {
+    const toQuoted =
+      'diff --git a/src/big.ts "b/src/caf\\303\\251.ts"\nsimilarity index 90%\nrename from src/big.ts\nrename to "src/caf\\303\\251.ts"\n+++ "b/src/caf\\303\\251.ts"';
+    expect(extractChangedFiles(toQuoted)).toEqual(['src/café.ts']);
+    const fromQuoted = 'diff --git "a/src/caf\\303\\251.ts" b/src/plain.ts\n+++ b/src/plain.ts';
+    expect(extractChangedFiles(fromQuoted)).toEqual(['src/plain.ts']);
+    const escapedQuote =
+      'diff --git "a/src/say \\"hi\\".ts" "b/src/say \\"hi\\".ts"\n+++ "b/src/say \\"hi\\".ts"\t';
+    expect(extractChangedFiles(escapedQuote)).toEqual(['src/say "hi".ts']);
   });
 
   it('returns empty array for empty diff', () => {

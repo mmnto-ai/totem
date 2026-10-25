@@ -22,17 +22,19 @@ const C_ESCAPES: Readonly<Record<string, number>> = Object.freeze({
  * arrives as `"src/caf\303\251.ts"` — and always quotes one carrying a double
  * quote, a backslash or a control character, writing each such byte as a
  * three-digit octal escape or a one-letter C escape. A path with a space is
- * written bare and followed by a tab so its end is unambiguous.
+ * followed by a tab so its end is unambiguous — quoted or not: a quoted spaced
+ * path arrives as `"b/src/my caf\303\251.ts"<TAB>` (read 3).
  *
- * A quoted header is unquoted and its escapes decoded to UTF-8; a bare header
- * has a trailing tab removed. A path that was never quoted or tabbed comes back
+ * The trailing tab goes first; a quoted header is then unquoted and its
+ * escapes decoded to UTF-8. A path that was never quoted or tabbed comes back
  * byte-identical. Without this a quoted path reached `git show` and the file
  * system as the literal escape text, so the file was never found.
  */
 export function decodeGitHeaderPath(headerPath: string): string {
-  const quoted = headerPath.length >= 2 && headerPath.startsWith('"') && headerPath.endsWith('"');
-  if (!quoted) return headerPath.replace(/\t$/, '');
-  const chars = Array.from(headerPath.slice(1, -1));
+  const label = headerPath.replace(/\t$/, '');
+  const quoted = label.length >= 2 && label.startsWith('"') && label.endsWith('"');
+  if (!quoted) return label;
+  const chars = Array.from(label.slice(1, -1));
   const bytes: number[] = [];
   for (let i = 0; i < chars.length; i++) {
     const ch = chars[i]!;

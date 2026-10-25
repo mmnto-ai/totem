@@ -326,6 +326,33 @@ diff --git a/b.ts b/b.ts
     expect(additions).toHaveLength(1);
     expect(additions[0]!.file).toBe('src/a b/v.ts');
   });
+
+  // Read 3 of mmnto-ai/totem#3048: git appends the tab after a label whenever the
+  // path contains a space, quoted or not, so a quoted spaced path is both. A
+  // decoder that tests the closing quote before stripping the tab misses it.
+  it('decodes a quoted header that git also tab-terminates (a quoted path with a space)', () => {
+    const diff = [
+      'diff --git "a/src/my caf\\303\\251.ts" "b/src/my caf\\303\\251.ts"',
+      '--- "a/src/my caf\\303\\251.ts"\t',
+      '+++ "b/src/my caf\\303\\251.ts"\t',
+      '@@ -1,2 +1,3 @@',
+      ' line1',
+      '+added line',
+      ' line2',
+      'diff --git "a/src/q\\" x.ts" "b/src/q\\" x.ts"',
+      '--- "a/src/q\\" x.ts"\t',
+      '+++ "b/src/q\\" x.ts"\t',
+      '@@ -1,2 +1,3 @@',
+      ' line1',
+      '+added line',
+      ' line2',
+    ].join('\n');
+
+    const additions = extractAddedLines(diff);
+    expect(additions).toHaveLength(2);
+    expect(additions[0]!.file).toBe('src/my café.ts');
+    expect(additions[1]!.file).toBe('src/q" x.ts');
+  });
 });
 
 describe('decodeGitHeaderPath', () => {
@@ -346,7 +373,13 @@ describe('decodeGitHeaderPath', () => {
 
   it('keeps a backslash that is not an escape and keeps raw non-ASCII inside quotes (core.quotepath off)', () => {
     expect(decodeGitHeaderPath('"b/odd\\q.ts"')).toBe('b/odd\\q.ts');
-    expect(decodeGitHeaderPath('"b/café \\"x\\".ts"')).toBe('b/café "x".ts');
+    // A quoted label with a space is tab-terminated, as git writes it.
+    expect(decodeGitHeaderPath('"b/café \\"x\\".ts"\t')).toBe('b/café "x".ts');
+  });
+
+  it('strips the trailing tab before the quoted check, so a quoted spaced path decodes', () => {
+    expect(decodeGitHeaderPath('"b/src/my caf\\303\\251.ts"\t')).toBe('b/src/my café.ts');
+    expect(decodeGitHeaderPath('"b/src/q\\" x.ts"\t')).toBe('b/src/q" x.ts');
   });
 
   it('removes only a trailing tab from a bare path', () => {

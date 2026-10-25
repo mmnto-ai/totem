@@ -1165,6 +1165,19 @@ describe('runCompiledRules', () => {
         }
       });
 
+      it('classifies added lines from HEAD in the other direction: a comment at HEAD that the index and disk turned into code stays silent', async () => {
+        // Pre-fold the classifier read the index (code) and the regex hit fired,
+        // blocking a push whose commit carries only a comment.
+        writeRules(tmpDir, [makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log')]);
+        const COMMENTED = '// context\n//  console.log("foo");\n// context\n';
+        const { restore } = divergence({ disk: FOO, head: COMMENTED, index: FOO });
+        try {
+          expect(await violationCount({ readFromHead: true })).toBe(0);
+        } finally {
+          restore();
+        }
+      });
+
       it('skips a submodule gitlink at HEAD (mode 160000) without reading it — a bump is not a file', async () => {
         writeRules(tmpDir, [fooRule()]);
         const { calls, restore } = divergence({ disk: FOO, head: FOO, headMode: '160000' });

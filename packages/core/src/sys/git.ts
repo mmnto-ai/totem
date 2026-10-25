@@ -783,6 +783,24 @@ function containsNotAGitRepo(err: unknown): boolean {
  * Splits on `diff --git` boundaries and removes sections for ignored files.
  * Uses matchesGlob from core for consistent glob behavior.
  */
+/**
+ * The destination label of a `diff --git a/<x> b/<y>` line, decoded
+ * (mmnto-ai/totem#3048, reads 2 and 3). Git C-quotes a label carrying a
+ * non-ASCII byte (default `core.quotepath`), a double quote, a backslash or a
+ * control character, and either side may be quoted on its own: a rename from an
+ * ASCII name to a non-ASCII one quotes only the b side. A quoted b side is
+ * decoded. A bare b side is read to the end of the line; git writes a spaced
+ * path bare on this line with no terminator, so that read is ambiguous when the
+ * bare path itself contains ` b/` (tracked separately). Null when the line has
+ * no readable b side.
+ */
+function diffGitDestination(line: string): string | null {
+  const quotedB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) "b\/((?:[^"\\]|\\.)*)"$/); // totem-ignore — single line match, not iterating
+  if (quotedB) return decodeGitHeaderPath(`"${quotedB[1]!}"`);
+  const bareB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) b\/(.+)$/); // totem-ignore — single line match, not iterating
+  return bareB ? bareB[1]! : null;
+}
+
 export function filterDiffByPatterns(diff: string, patterns: string[]): string {
   if (patterns.length === 0) return diff;
 
@@ -791,12 +809,7 @@ export function filterDiffByPatterns(diff: string, patterns: string[]): string {
     .filter((section) => {
       // Extract destination path (b/) — handles renames correctly
       const firstLine = section.substring(0, section.indexOf('\n'));
-      const quoted = firstLine.match(/^diff --git "a\/.*?" "b\/(.*?)"$/);
-      const unquoted = firstLine.match(/^diff --git a\/\S+ b\/(.+)$/);
-      // A quoted path carries git's C escapes (mmnto-ai/totem#3048 read 2);
-      // decode them so an ignore glob meets the real name.
-      const filePath =
-        quoted?.[1] !== undefined ? decodeGitHeaderPath(`"${quoted[1]}"`) : unquoted?.[1];
+      const filePath = diffGitDestination(firstLine);
       if (!filePath) return true;
       return !patterns.some((p) => matchesGlob(filePath, p));
     })
@@ -807,20 +820,8 @@ export function extractChangedFiles(diff: string): string[] {
   const files: string[] = [];
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git')) {
-      // Handle quoted paths: diff --git "a/caf\303\251.ts" "b/caf\303\251.ts" —
-      // git C-quotes a path with a non-ASCII byte (default core.quotepath), a
-      // double quote, a backslash or a control character, so the capture is
-      // decoded (mmnto-ai/totem#3048 read 2). A path with a SPACE is not quoted
-      // on this line and the bare form below is ambiguous for it; that is
-      // tracked separately.
-      const quoted = line.match(/^diff --git "a\/.+" "b\/(.+)"$/); // totem-ignore — single line match, not iterating
-      if (quoted) {
-        files.push(decodeGitHeaderPath(`"${quoted[1]!}"`));
-        continue;
-      }
-      // Standard unquoted paths: diff --git a/file.ts b/file.ts
-      const unquoted = line.match(/^diff --git a\/.+ b\/(.+)$/); // totem-ignore — single line match
-      if (unquoted) files.push(unquoted[1]!);
+      const filePath = diffGitDestination(line);
+      if (filePath !== null) files.push(filePath);
     }
   }
   return files;
