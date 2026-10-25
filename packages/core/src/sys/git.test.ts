@@ -458,6 +458,12 @@ describe('extractChangedFiles', () => {
     expect(extractChangedFiles(diff)).toEqual(['my file.ts']);
   });
 
+  it('decodes the C escapes of a quoted non-ASCII path (default core.quotepath; mmnto-ai/totem#3048)', () => {
+    const diff =
+      'diff --git "a/src/caf\\303\\251.ts" "b/src/caf\\303\\251.ts"\n+++ "b/src/caf\\303\\251.ts"';
+    expect(extractChangedFiles(diff)).toEqual(['src/café.ts']);
+  });
+
   it('returns empty array for empty diff', () => {
     expect(extractChangedFiles('')).toEqual([]);
   });

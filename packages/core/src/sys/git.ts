@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { decodeGitHeaderPath } from '../diff-parser.js';
 import { getErrorMessage, TotemError, TotemGitError } from '../errors.js';
 import { safeExec } from './exec.js';
 import { matchesGlob } from './glob.js';
@@ -792,7 +793,10 @@ export function filterDiffByPatterns(diff: string, patterns: string[]): string {
       const firstLine = section.substring(0, section.indexOf('\n'));
       const quoted = firstLine.match(/^diff --git "a\/.*?" "b\/(.*?)"$/);
       const unquoted = firstLine.match(/^diff --git a\/\S+ b\/(.+)$/);
-      const filePath = quoted?.[1] ?? unquoted?.[1];
+      // A quoted path carries git's C escapes (mmnto-ai/totem#3048 read 2);
+      // decode them so an ignore glob meets the real name.
+      const filePath =
+        quoted?.[1] !== undefined ? decodeGitHeaderPath(`"${quoted[1]}"`) : unquoted?.[1];
       if (!filePath) return true;
       return !patterns.some((p) => matchesGlob(filePath, p));
     })
@@ -803,10 +807,15 @@ export function extractChangedFiles(diff: string): string[] {
   const files: string[] = [];
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git')) {
-      // Handle quoted paths (spaces): diff --git "a/my file.ts" "b/my file.ts"
+      // Handle quoted paths: diff --git "a/caf\303\251.ts" "b/caf\303\251.ts" —
+      // git C-quotes a path with a non-ASCII byte (default core.quotepath), a
+      // double quote, a backslash or a control character, so the capture is
+      // decoded (mmnto-ai/totem#3048 read 2). A path with a SPACE is not quoted
+      // on this line and the bare form below is ambiguous for it; that is
+      // tracked separately.
       const quoted = line.match(/^diff --git "a\/.+" "b\/(.+)"$/); // totem-ignore — single line match, not iterating
       if (quoted) {
-        files.push(quoted[1]!);
+        files.push(decodeGitHeaderPath(`"${quoted[1]!}"`));
         continue;
       }
       // Standard unquoted paths: diff --git a/file.ts b/file.ts

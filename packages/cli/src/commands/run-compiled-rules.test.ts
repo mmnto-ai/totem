@@ -1035,10 +1035,14 @@ describe('runCompiledRules', () => {
         });
       }
 
-      /** Writes the disk copy; serves HEAD's copy (and the index's) through the git mock. */
+      /**
+       * Writes the disk copy; serves HEAD's copy (`show HEAD:<file>`) and the
+       * index's (`show :<file>`, defaulting to HEAD's) through the git mock.
+       */
       function divergence(params: {
         disk: string;
         head: string;
+        index?: string;
         headMode?: string;
         showThrows?: boolean;
       }) {
@@ -1059,7 +1063,7 @@ describe('runCompiledRules', () => {
             }
             if (args[0] === 'show') {
               if (params.showThrows) throw new Error('[Totem Error] Command failed: show');
-              return params.head;
+              return args[1]?.startsWith(':') ? (params.index ?? params.head) : params.head;
             }
             return '';
           });
@@ -1139,6 +1143,34 @@ describe('runCompiledRules', () => {
           expect(calls.includes('show :src/app.ts')).toBe(true);
           expect(calls.includes('show HEAD:src/app.ts')).toBe(false);
           expect(calls.some((c) => c.startsWith('ls-tree'))).toBe(false);
+        } finally {
+          restore();
+        }
+      });
+
+      it('classifies added lines from HEAD: a line commented out in the index and on disk but live at HEAD still fires a regex rule', async () => {
+        // The AST-context classifier decides which added lines are code; a
+        // regex hit on a comment line is telemetry only. Pre-fold the classifier
+        // read the index then the disk (`git show :<file>`), so the staged
+        // comment-out below hid the pushed violation.
+        writeRules(tmpDir, [makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log')]);
+        const COMMENTED = '// context\n//  console.log("foo");\n// context\n';
+        const { calls, restore } = divergence({ disk: COMMENTED, head: FOO, index: COMMENTED });
+        try {
+          expect(await violationCount({ readFromHead: true })).toBe(1);
+          expect(calls.includes('show HEAD:src/app.ts')).toBe(true);
+          expect(calls.includes('show :src/app.ts')).toBe(false);
+        } finally {
+          restore();
+        }
+      });
+
+      it('skips a submodule gitlink at HEAD (mode 160000) without reading it — a bump is not a file', async () => {
+        writeRules(tmpDir, [fooRule()]);
+        const { calls, restore } = divergence({ disk: FOO, head: FOO, headMode: '160000' });
+        try {
+          expect(await violationCount({ readFromHead: true })).toBe(0);
+          expect(calls.some((c) => c.startsWith('show '))).toBe(false);
         } finally {
           restore();
         }

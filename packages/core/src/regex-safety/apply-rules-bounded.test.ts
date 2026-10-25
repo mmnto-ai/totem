@@ -67,6 +67,56 @@ describe('applyRulesToAdditionsBounded — happy path', () => {
   });
 });
 
+// mmnto-ai/totem#3048 read 2 — the Rust test-span exemption reads the same bytes
+// as the rest of the lint: the caller's `readStrategy` when set (the index under
+// --staged, HEAD under the branch-vs-base scope), else the disk. Before, it read
+// the disk unconditionally, so a disk-only edit wrapping a pushed line in a
+// `#[cfg(test)]` module exempted the pushed violation. The fixtures below give
+// the reader a different file from anything on disk (there is no disk file at
+// all), so only the reader can produce the observed verdict.
+describe('applyRulesToAdditionsBounded — Rust test-span exemption source', () => {
+  const rustRule: CompiledRule = {
+    ...regexRule('rs-unwrap', 'unwrap\\(\\)'),
+    fileGlobs: ['**/*.rs'],
+  };
+  const TEST_MODULE = ['#[cfg(test)]', 'mod tests {', '    fn f() { x.unwrap(); }', '}'].join('\n');
+  const PRODUCTION = ['fn g() {}', 'fn h() {}', 'fn f() { x.unwrap(); }', 'fn i() {}'].join('\n');
+  const hit = addition('src/lib.rs', '    fn f() { x.unwrap(); }', 3);
+
+  async function violationsWith(
+    readStrategy: ((filePath: string) => Promise<string | null>) | undefined,
+  ): Promise<number> {
+    const evaluator = new RegexEvaluator();
+    try {
+      const result = await applyRulesToAdditionsBounded(makeRuleEngineCtx(), [rustRule], [hit], {
+        evaluator,
+        timeoutMode: 'strict',
+        repoRoot: '/tmp/repo-that-does-not-exist',
+        ...(readStrategy ? { readStrategy } : {}),
+      });
+      return result.violations.length;
+    } finally {
+      await evaluator.dispose();
+    }
+  }
+
+  it('exempts a hit the readStrategy places inside a #[cfg(test)] module', async () => {
+    expect(await violationsWith(async () => TEST_MODULE)).toBe(0);
+  });
+
+  it('fires on a hit the readStrategy places in production code', async () => {
+    expect(await violationsWith(async () => PRODUCTION)).toBe(1);
+  });
+
+  it('fires when the readStrategy returns null — no spans, no exemption', async () => {
+    expect(await violationsWith(async () => null)).toBe(1);
+  });
+
+  it('fires when there is no reader and no disk file — a failed disk read yields no spans', async () => {
+    expect(await violationsWith(undefined)).toBe(1);
+  });
+});
+
 describe('applyRulesToAdditionsBounded — timeout strict', () => {
   it('returns a RuleTimeoutOutcome and excludes violations for the timing-out rule', async () => {
     const evaluator = new RegexEvaluator({ timeoutMs: 150, softWarningMs: 50 });
