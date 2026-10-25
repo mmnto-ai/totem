@@ -779,11 +779,6 @@ function containsNotAGitRepo(err: unknown): boolean {
 }
 
 /**
- * Filter a unified diff to exclude files matching ignore patterns.
- * Splits on `diff --git` boundaries and removes sections for ignored files.
- * Uses matchesGlob from core for consistent glob behavior.
- */
-/**
  * The destination label of a `diff --git a/<x> b/<y>` line, decoded
  * (mmnto-ai/totem#3048, reads 2 and 3). Git C-quotes a label carrying a
  * non-ASCII byte (default `core.quotepath`), a double quote, a backslash or a
@@ -791,8 +786,9 @@ function containsNotAGitRepo(err: unknown): boolean {
  * ASCII name to a non-ASCII one quotes only the b side. A quoted b side is
  * decoded. A bare b side is read to the end of the line; git writes a spaced
  * path bare on this line with no terminator, so that read is ambiguous when the
- * bare path itself contains ` b/` (tracked separately). Null when the line has
- * no readable b side.
+ * bare path itself contains ` b/` — the fragment is what the listing shows and
+ * what an ignore glob meets (mmnto-ai/totem#3110). Null when the line has no
+ * readable b side.
  */
 function diffGitDestination(line: string): string | null {
   const quotedB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) "b\/((?:[^"\\]|\\.)*)"$/); // totem-ignore — single line match, not iterating
@@ -801,6 +797,11 @@ function diffGitDestination(line: string): string | null {
   return bareB ? bareB[1]! : null;
 }
 
+/**
+ * Filter a unified diff to exclude files matching ignore patterns.
+ * Splits on `diff --git` boundaries and removes sections for ignored files.
+ * Uses matchesGlob from core for consistent glob behavior.
+ */
 export function filterDiffByPatterns(diff: string, patterns: string[]): string {
   if (patterns.length === 0) return diff;
 

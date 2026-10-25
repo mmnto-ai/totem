@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "921cb8c3d1f58f1c67f174b16cfe3971087574bb",
+  "readAt": "2026-10-25T20:06:00Z",
+  "findings": [
+    {
+      "id": "3048-r4-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 169,
+      "claim": "The branch-scope diff is `git diff <ref>...HEAD` with no `--no-ext-diff` / `--no-color`, so a repository or user config that changes the porcelain output makes lint grade zero additions and pass a pushed violation. This predates the fold and is not path-related, but it is a repository-state input the gate does not handle.",
+      "counterexample": "Measured on the build CLI. In a throwaway repo, `git config diff.external true` (difftastic's documented setup is `diff.external difft`), commit src/v.ts with `console.log(1)` under a hard regex rule on `**/*.ts`, run `lint --branch`: EXIT=0, output stops after the `Diff source` line. Same with `git config color.ui always` or `color.diff always`: `Changed files (0)`, Verdict PASS, EXIT=0. Measured identically on main's dist (f2 PASS, f5 EXIT=0), so it predates this build."
+    },
+    {
+      "id": "3048-r4-F2",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/diff-parser.ts",
+      "line": 90,
+      "claim": "The parser assumes git's default `a/`/`b/` labels. Under `diff.srcPrefix`/`diff.dstPrefix`, or `diff.noprefix` with a top-level directory named `b`, the `+++` label is not the repo path, so the HEAD reader asks for a path that does not exist and a clean push hard-errors with HEAD_READ_FAILED. Main blocked the same push with a false FAIL.",
+      "counterexample": "Measured on the build CLI. (1) `git config diff.dstPrefix y/`, commit src/v.ts with `// LOGGING_OK` plus `console.log(1)` under a file-scoped requirement rule: EXIT=1, `Failed to read HEAD content for y/src/v.ts`; an ast-grep rule gives the same error. (2) `git config diff.noprefix true`, a clean b/x.ts with the requirement met: EXIT=1, `Failed to read HEAD content for x.ts`; main's dist reports a false FAIL at x.ts:3 instead. Related, staged scope only: `git config diff.mnemonicPrefix true` gives `+++ i/src/v.ts`, so `lint --staged` hard-errors a clean commit (`Failed to read staged content for i/src/v.ts`) and reports a violation at `i/src/v.ts`. The branch scope is unaffected by mnemonicPrefix, which still prints a/ b/ for a commit range (measured)."
+    },
+    {
+      "id": "3048-r4-F3",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/3048.md",
+      "line": 141,
+      "claim": "The failure-mode row says HEAD_READ_FAILED is 'reachable only for a path git itself cannot render'. It is reachable for ordinary paths whenever the user's diff prefix config is not the default (F2).",
+      "counterexample": "Measured: the F2 cases (diff.dstPrefix y/ on src/v.ts; diff.noprefix on b/x.ts) raise HEAD_READ_FAILED for paths git renders fine."
+    },
+    {
+      "id": "3048-r4-F4",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/3048.md",
+      "line": 146,
+      "claim": "The row says the ` b/` truncation leaves 'the lint verdict unaffected'. It doesn't: the ignore filter matches the truncated fragment, so a pushed violation in a file the config does not ignore is dropped from the lint diff and the push passes. The changeset's disclosure (line 6) mentions only the truncation, and mmnto-ai/totem#3110's body says 'The lint verdict is right'. This predates the fold; the parent's `a\\/\\S+` filter drops the same file.",
+      "counterexample": "Measured on the build CLI. Config `shieldIgnorePatterns: ['generated/**']`, commit `src/lib b/generated/x.ts` containing `console.log(1)` under a hard regex rule on `**/*.ts`, run `lint --branch`: `Changed files (1): totem.yaml`, Verdict PASS, EXIT=0. The real path does not match `generated/**` (matchesGlob returns false); the fragment `generated/x.ts` does. Control: vendor/ab/x.ts under `vendor/**` is dropped as intended."
+    },
+    {
+      "id": "3048-r4-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 794,
+      "claim": "The new `diffGitDestination` JSDoc still says '(tracked separately)' with no issue number; read 3 flagged that same clause, and the cite should be mmnto-ai/totem#3110. The new docblock was also inserted after `filterDiffByPatterns`' own JSDoc (lines 781-785), which is now orphaned above `diffGitDestination`, so `filterDiffByPatterns` has no doc comment.",
+      "counterexample": "Read: git.ts lines 781-785 hold the 'Filter a unified diff to exclude files matching ignore patterns' block, followed directly by the `diffGitDestination` block (786-796); `export function filterDiffByPatterns` at 804 carries no JSDoc of its own."
+    }
+  ],
+  "folded": [
+    "3048-r4-F3",
+    "3048-r4-F4",
+    "3048-r4-F5"
+  ],
+  "verdict": "Read 4 of the mmnto-ai/totem#3048 build, scoped to the third fold, at 921cb8c3 against 7f032d47: blocking=2 material=2 minor=1 question=0 folded=3 (counts as typed). CONVERGED on the path-shape axis under default git config, by its own measurement: a quoted spaced path with a violation, clean, commented out on disk or in the index, reversed, with a met and an unmet file-scoped requirement; a quote, a backslash, a tab and a tab-plus-space in a name; renames in both directions and to a spaced non-ASCII name; an ignore glob meeting the decoded name; the destination parser on every quoting shape; the new tests failing on the parent's code; the three deposits' shas, counts and fields. NOT CONVERGED on a second axis the question also covers, the repository's diff config (an external diff, forced colour, renamed or disabled a/ b/ prefixes): pre-existing on every scope, reproduced on main's dist, routed with the measured cure to mmnto-ai/totem#3113 (F1, F2). Folded in the commit after 921cb8c3, prose and a doc comment only: the two spec rows, the ignore-filter effect disclosed in the changeset and corrected on mmnto-ai/totem#3110, the filter's JSDoc restored and the clause cited."
+}
