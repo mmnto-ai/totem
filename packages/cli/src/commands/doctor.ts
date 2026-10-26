@@ -267,7 +267,7 @@ export async function checkGitHooks(
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${sensed.totemDir}': ${sensed.failure}`,
+        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${sensed.totemDir}': ${sensed.failure}${judgedHere}`,
         remediation: `${fromMainWorktree}totem hook install --force (re-renders the four hooks from the current config)`,
       };
     }
