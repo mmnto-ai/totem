@@ -99,19 +99,18 @@ function resolveGitDirs(gitRoot: string): { gitDir: string; commonDir: string } 
       };
     }
   }
+  // The offline walk reads existence, never catches: an unreadable file is a
+  // real failure and stays loud (Tenet 4), as in `resolveHooksDir` above.
   const gitPath = path.join(gitRoot, '.git');
-  try {
-    if (fs.statSync(gitPath).isDirectory()) return { gitDir: gitPath, commonDir: gitPath };
-    const match = /^gitdir:\s*(.+)$/.exec(fs.readFileSync(gitPath, 'utf-8').trim());
-    if (!match) return null;
-    const gitDir = path.resolve(gitRoot, match[1]!.trim());
-    const commonDirFile = path.join(gitDir, 'commondir');
-    if (!fs.existsSync(commonDirFile)) return { gitDir, commonDir: gitDir };
-    const commonDir = fs.readFileSync(commonDirFile, 'utf-8').trim();
-    return { gitDir, commonDir: path.resolve(gitDir, commonDir) };
-  } catch {
-    return null;
-  }
+  if (!fs.existsSync(gitPath)) return null;
+  if (fs.statSync(gitPath).isDirectory()) return { gitDir: gitPath, commonDir: gitPath };
+  const match = /^gitdir:\s*(.+)$/.exec(fs.readFileSync(gitPath, 'utf-8').trim());
+  if (!match) return null;
+  const gitDir = path.resolve(gitRoot, match[1]!.trim());
+  const commonDirFile = path.join(gitDir, 'commondir');
+  if (!fs.existsSync(commonDirFile)) return { gitDir, commonDir: gitDir };
+  const commonDir = fs.readFileSync(commonDirFile, 'utf-8').trim();
+  return { gitDir, commonDir: path.resolve(gitDir, commonDir) };
 }
 
 /**
@@ -137,12 +136,9 @@ export function isLinkedWorktree(gitRoot: string): boolean {
 export function commonRepositoryIsBare(gitRoot: string): boolean {
   const dirs = resolveGitDirs(gitRoot);
   if (!dirs) return false;
-  try {
-    const config = fs.readFileSync(path.join(dirs.commonDir, 'config'), 'utf-8');
-    return /^\s*bare\s*=\s*true\s*$/im.test(config);
-  } catch {
-    return false;
-  }
+  const configPath = path.join(dirs.commonDir, 'config');
+  if (!fs.existsSync(configPath)) return false;
+  return /^\s*bare\s*=\s*true\s*$/im.test(fs.readFileSync(configPath, 'utf-8'));
 }
 
 /** Skip line shared by every caller that hits an unresolvable hooks directory. */
