@@ -584,6 +584,15 @@ describe('extractChangedFiles', () => {
     expect(filterDiffByPatterns(copyIntoSpaced, ['src/new b/**'])).toBe('');
   });
 
+  it('reads a binary section with " b/" in its path: an added or modified binary has equal header sides, a renamed one carries "rename to" before its "Binary files" line (mmnto-ai/totem#3114 round 7)', () => {
+    const binaryModify =
+      'diff --git a/img/a b/logo.png b/img/a b/logo.png\nindex 1..2 100644\nBinary files a/img/a b/logo.png and b/img/a b/logo.png differ';
+    expect(extractChangedFiles(binaryModify)).toEqual(['img/a b/logo.png']);
+    const binaryRename =
+      'diff --git a/img/a b/old.png b/img/new.png\nsimilarity index 90%\nrename from img/a b/old.png\nrename to img/new.png\nindex 1..2 100644\nBinary files a/img/a b/old.png and b/img/new.png differ';
+    expect(extractChangedFiles(binaryRename)).toEqual(['img/new.png']);
+  });
+
   it('returns empty array for empty diff', () => {
     expect(extractChangedFiles('')).toEqual([]);
   });
