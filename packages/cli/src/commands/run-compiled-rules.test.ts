@@ -1297,6 +1297,11 @@ describe('runCompiledRules', () => {
             code: 'HEAD_READ_FAILED',
           });
           await expect(run).rejects.toThrow('Failed to read HEAD content for src/app.ts');
+          // The underlying error is the cause itself, never wrapped in an object
+          // (mmnto-ai/totem#3114 round 6): cause-chain walkers read it directly.
+          await expect(run).rejects.toMatchObject({
+            cause: expect.objectContaining({ message: '[Totem Error] Command failed: show' }),
+          });
         } finally {
           restore();
         }

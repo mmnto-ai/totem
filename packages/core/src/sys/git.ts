@@ -784,15 +784,25 @@ function containsNotAGitRepo(err: unknown): boolean {
  * non-ASCII byte (default `core.quotepath`), a double quote, a backslash or a
  * control character, and either side may be quoted on its own: a rename from an
  * ASCII name to a non-ASCII one quotes only the b side. A quoted b side is
- * decoded. A bare b side is read to the end of the line; git writes a spaced
- * path bare on this line with no terminator, so that read is ambiguous when the
- * bare path itself contains ` b/` — the fragment is what the listing shows and
- * what an ignore glob meets (mmnto-ai/totem#3110). Null when the line has no
- * readable b side.
+ * decoded. A bare b side is read to the end of the line: from the first ` b/`
+ * when the a side holds no space (the boundary the filter used before this
+ * change, which reads a rename into a path containing ` b/` whole), else from
+ * the last ` b/`. Git writes a spaced path bare on this line with no terminator,
+ * so the read is ambiguous when the a side holds a space and the path itself
+ * contains ` b/` — the fragment is what the listing shows and what an ignore
+ * glob meets (mmnto-ai/totem#3110). Null when the line has no readable b side.
  */
 function diffGitDestination(line: string): string | null {
   const quotedB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) "b\/((?:[^"\\]|\\.)*)"$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
   if (quotedB) return decodeGitHeaderPath(`"${quotedB[1]!}"`);
+  // A bare b side after a bare a side that holds no space: the FIRST ` b/` is
+  // the boundary, as the filter read it before mmnto-ai/totem#3048, so a rename
+  // into a destination that itself contains ` b/` is read whole.
+  const firstBoundaryB = line.match(/^diff --git a\/\S+ b\/(.+)$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
+  if (firstBoundaryB) return firstBoundaryB[1]!;
+  // A bare b side after a spaced or quoted a side: the LAST ` b/` is the only
+  // boundary the line offers, ambiguous when the destination also holds ` b/`
+  // (mmnto-ai/totem#3110).
   const bareB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) b\/(.+)$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
   return bareB ? bareB[1]! : null;
 }

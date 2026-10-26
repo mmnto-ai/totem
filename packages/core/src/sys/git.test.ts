@@ -343,6 +343,25 @@ describe('filterDiffByPatterns', () => {
     '+const x = 1;',
   ].join('\n');
 
+  it('keeps the first-boundary read for a bare destination containing " b/" after a spaceless source — a rename into such a path is filtered by its whole name (mmnto-ai/totem#3114 round 6)', () => {
+    // The filter before mmnto-ai/totem#3048 read `a/\S+ b/(.+)`, so for this
+    // header it saw `src/a b/config.ts`; a greedy source read backtracks to the
+    // LAST ` b/` and sees `config.ts`, which the ignore glob never matches.
+    const rename = [
+      'diff --git a/old.ts b/src/a b/config.ts',
+      'similarity index 90%',
+      'rename from old.ts',
+      'rename to src/a b/config.ts',
+      '--- a/old.ts',
+      '+++ b/src/a b/config.ts\t',
+      '@@ -1 +1 @@',
+      '-x',
+      '+y',
+    ].join('\n');
+    expect(filterDiffByPatterns(rename, ['src/a b/**'])).toBe('');
+    expect(filterDiffByPatterns(rename, ['other/**'])).toBe(rename);
+  });
+
   it('removes sections matching ignore patterns', () => {
     const combined = DIFF_WITH_STRATEGY + '\n' + DIFF_WITH_CODE;
     const result = filterDiffByPatterns(combined, ['.strategy']);
@@ -495,6 +514,13 @@ describe('extractChangedFiles', () => {
     const escapedQuote =
       'diff --git "a/src/say \\"hi\\".ts" "b/src/say \\"hi\\".ts"\n+++ "b/src/say \\"hi\\".ts"\t';
     expect(extractChangedFiles(escapedQuote)).toEqual(['src/say "hi".ts']);
+  });
+
+  it('reads a bare destination containing " b/" whole after a spaceless source, and a spaced path from the last boundary otherwise (mmnto-ai/totem#3114 round 6; the remaining ambiguity is mmnto-ai/totem#3110)', () => {
+    const renameInto = 'diff --git a/old.ts b/src/a b/config.ts\n+++ b/src/a b/config.ts\t';
+    expect(extractChangedFiles(renameInto)).toEqual(['src/a b/config.ts']);
+    const spacedBoth = 'diff --git a/my dir/x.ts b/my dir/x.ts\n+++ b/my dir/x.ts\t';
+    expect(extractChangedFiles(spacedBoth)).toEqual(['my dir/x.ts']);
   });
 
   it('returns empty array for empty diff', () => {

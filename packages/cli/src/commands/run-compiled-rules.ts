@@ -625,7 +625,7 @@ export async function runCompiledRules(
           code,
           `Failed to read ${noun} content for ${filePath}`,
           `git show ${ref}:${filePath} failed. ${cure}`,
-          { cause: err },
+          err,
         );
       }
     };
