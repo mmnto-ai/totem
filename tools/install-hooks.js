@@ -26,6 +26,14 @@ if (!existsSync(gitPath)) {
  * that case `.git/hooks` is not a real path, so we follow the pointer (and its
  * `commondir`, when present) to the shared hooks dir instead. Without this a
  * worktree's `mkdir .git/hooks` fails with ENOTDIR.
+ *
+ * A `commondir` marks a LINKED worktree, and the hooks dir it names is the one
+ * every worktree of the repository runs: writing it from here would install
+ * THIS branch's templates for all of them, silently reverting a newer main
+ * worktree's hooks (mmnto-ai/totem#3122). The main worktree owns the shared
+ * hooks, so a linked worktree skips the write (exit 0, one line) unless
+ * `TOTEM_HOOKS_FORCE=1` says the caller means it. A BARE common repository has
+ * no main worktree, so its worktrees write as before.
  */
 function resolveHooksDir() {
   if (statSync(gitPath).isDirectory()) {
@@ -48,7 +56,19 @@ function resolveHooksDir() {
   const commonDirFile = join(gitDir, 'commondir');
   if (existsSync(commonDirFile)) {
     const commonDir = readFileSync(commonDirFile, 'utf-8').trim();
-    return join(isAbsolute(commonDir) ? commonDir : resolve(gitDir, commonDir), 'hooks');
+    const commonDirPath = isAbsolute(commonDir) ? commonDir : resolve(gitDir, commonDir);
+    // A BARE common repository (one worktree per branch, no main working tree)
+    // has nothing else to own the shared hooks, so its worktrees write them.
+    const bare = existsSync(join(commonDirPath, 'config'))
+      ? /^\s*bare\s*=\s*true\s*$/im.test(readFileSync(join(commonDirPath, 'config'), 'utf-8'))
+      : false;
+    if (!bare && process.env.TOTEM_HOOKS_FORCE !== '1') {
+      console.log(
+        '[totem] Linked worktree: git hooks are shared by every worktree of this repository and the main worktree owns them — skipping hook installation (run `pnpm install` from the main worktree, or set TOTEM_HOOKS_FORCE=1 to write them from this branch).',
+      );
+      process.exit(0);
+    }
+    return join(commonDirPath, 'hooks');
   }
   return join(gitDir, 'hooks');
 }

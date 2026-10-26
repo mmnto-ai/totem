@@ -26,12 +26,14 @@ import {
   buildPrePushHook,
   buildResolveBlock,
   checkHooksInstalled,
+  commonRepositoryIsBare,
   declaredHookTier,
   generateHookHelpers,
   getFallbackCommand,
   installGitHook,
   installHooksNonInteractive,
   isAttestedTrailer,
+  isLinkedWorktree,
   isTotemOwnedWithAttestedTrailer,
   TOTEM_CHECKOUT_END,
   TOTEM_CHECKOUT_MARKER,
@@ -1664,6 +1666,99 @@ describe('installHooksNonInteractive', () => {
   it('returns null when not a git repo', async () => {
     const result = await installHooksNonInteractive(tmpDir);
     expect(result).toBeNull();
+  });
+
+  // ── A linked worktree never writes the SHARED hooks without --force (mmnto-ai/totem#3122) ──
+  //
+  // Every worktree of a repository runs the one hooks dir under the common git dir, so
+  // an install from a worktree on an older branch silently reverts the main worktree's
+  // hooks. The main worktree owns them; `--force` is the one way to write from a worktree.
+
+  function initRepoWithWorktree(root: string): { main: string; linked: string } {
+    const main = path.join(root, 'main');
+    fs.mkdirSync(main, { recursive: true });
+    const git = (args: string[], cwd: string) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], {
+        cwd,
+        stdio: 'ignore',
+      });
+    git(['init', '-q'], main);
+    fs.writeFileSync(path.join(main, 'README.md'), 'x\n');
+    git(['add', 'README.md'], main);
+    git(['commit', '-q', '-m', 'init'], main);
+    const linked = path.join(root, 'linked');
+    git(['worktree', 'add', '-q', '-b', 'topic', linked], main);
+    return { main, linked };
+  }
+
+  it('isLinkedWorktree: false for the main worktree, true for a linked one, and the offline fallback reads the pointer target for a commondir', () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    expect(isLinkedWorktree(main)).toBe(false);
+    expect(isLinkedWorktree(linked)).toBe(true);
+
+    // A `gitdir:` pointer git cannot resolve exercises the offline fallback: no
+    // `commondir` at the target is the submodule shape (not linked); one present is
+    // a linked worktree.
+    const sub = path.join(tmpDir, 'sub');
+    const subGitDir = path.join(tmpDir, 'sub-gitdir');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.mkdirSync(subGitDir, { recursive: true });
+    fs.writeFileSync(path.join(sub, '.git'), `gitdir: ${subGitDir}\n`);
+    expect(isLinkedWorktree(sub)).toBe(false);
+    fs.writeFileSync(path.join(subGitDir, 'commondir'), '../..\n');
+    expect(isLinkedWorktree(sub)).toBe(true);
+  });
+
+  it('a linked worktree skips the shared hooks without --force, says why, and writes them with --force', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    const sharedHooksDir = path.join(main, '.git', 'hooks');
+    fs.mkdirSync(sharedHooksDir, { recursive: true });
+    const managed = () =>
+      fs.readdirSync(sharedHooksDir).filter((file) => !file.endsWith('.sample'));
+    const before = managed();
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((message: unknown) => {
+      lines.push(String(message));
+    });
+    try {
+      const result = await installHooksNonInteractive(linked);
+      expect(result).toBeNull();
+      expect(managed()).toEqual(before);
+      expect(
+        lines.some((line) => line.includes('linked worktree') && line.includes('--force')),
+      ).toBe(true);
+
+      const forced = await installHooksNonInteractive(linked, true);
+      expect(forced).not.toBeNull();
+      expect(forced!.prePush).toBe('installed');
+      expect(fs.readFileSync(path.join(sharedHooksDir, 'pre-push'), 'utf-8')).toContain(
+        TOTEM_PREPUSH_MARKER,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a worktree of a BARE repository writes the shared hooks without --force: nothing else owns them', async () => {
+    const { main } = initRepoWithWorktree(tmpDir);
+    const bare = path.join(tmpDir, 'repo.git');
+    execFileSync('git', ['clone', '-q', '--bare', main, bare], { stdio: 'ignore' });
+    const checkout = path.join(tmpDir, 'bare-wt');
+    execFileSync('git', ['-C', bare, 'worktree', 'add', '-q', checkout, 'HEAD'], {
+      stdio: 'ignore',
+    });
+
+    expect(isLinkedWorktree(checkout)).toBe(true);
+    expect(commonRepositoryIsBare(checkout)).toBe(true);
+    expect(commonRepositoryIsBare(main)).toBe(false);
+
+    const result = await installHooksNonInteractive(checkout);
+
+    expect(result).not.toBeNull();
+    expect(result!.prePush).toBe('installed');
+    expect(fs.readFileSync(path.join(bare, 'hooks', 'pre-push'), 'utf-8')).toContain(
+      TOTEM_PREPUSH_MARKER,
+    );
   });
 
   // ── The installed tier survives a bare rewrite (mmnto-ai/totem#2753 fold F4) ──

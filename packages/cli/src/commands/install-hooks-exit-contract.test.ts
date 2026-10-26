@@ -570,29 +570,43 @@ describe('hooksCommand in a linked worktree (mmnto-ai/totem#2418)', () => {
     expect(fs.realpathSync.native(resolved!)).toBe(fs.realpathSync.native(sharedHooksDir()));
   });
 
-  it('exit 0: install from the worktree lands in the shared hooks dir (no ENOTDIR)', async () => {
+  // Since mmnto-ai/totem#3122 the shared hooks are the main worktree's to write: a bare
+  // install from a linked worktree skips them with the owner line (still exit 0, still
+  // no ENOTDIR), and `--force` is the one way to land them from here.
+  it('exit 0: a bare install from the worktree skips the shared hooks with the owner line (no ENOTDIR); --force lands them', async () => {
     await expect(hooksCommand({})).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errorOutput()).toContain('linked worktree');
+    for (const hook of ['pre-commit', 'pre-push', 'post-merge', 'post-checkout']) {
+      expect(
+        fs.existsSync(path.join(sharedHooksDir(), hook)),
+        `${hook} written to the shared hooks dir from the worktree without --force`,
+      ).toBe(false);
+    }
+    // The pointer file survives untouched — nothing tried to mkdir through it.
+    expect(fs.statSync(path.join(wtDir, '.git')).isFile()).toBe(true);
+
+    await expect(hooksCommand({ force: true })).resolves.toBeUndefined();
     expect(exitSpy).not.toHaveBeenCalled();
     for (const hook of ['pre-commit', 'pre-push', 'post-merge', 'post-checkout']) {
       expect(
         fs.existsSync(path.join(sharedHooksDir(), hook)),
-        `${hook} missing from the shared hooks dir`,
+        `${hook} missing from the shared hooks dir after --force`,
       ).toBe(true);
     }
-    // The pointer file survives untouched — nothing tried to mkdir through it.
-    expect(fs.statSync(path.join(wtDir, '.git')).isFile()).toBe(true);
   });
 
-  it('--check from the worktree sees the shared hooks (exit 0)', async () => {
-    await hooksCommand({});
+  it('--check from the worktree sees the shared hooks once --force installed them (exit 0)', async () => {
+    await hooksCommand({ force: true });
     errorSpy.mockClear();
     await expect(hooksCommand({ check: true })).resolves.toBeUndefined();
     expect(exitSpy).not.toHaveBeenCalled();
     expect(errorOutput()).toContain('All hooks installed');
   });
 
-  it('installHooksNonInteractive from the worktree classifies all four hooks', async () => {
-    const result = await installHooksNonInteractive(wtDir);
+  it('installHooksNonInteractive from the worktree returns null bare and classifies all four hooks with force', async () => {
+    expect(await installHooksNonInteractive(wtDir)).toBeNull();
+    const result = await installHooksNonInteractive(wtDir, true);
     expect(result).not.toBeNull();
     expect(result!.preCommit).toBe('installed');
     expect(result!.prePush).toBe('installed');
