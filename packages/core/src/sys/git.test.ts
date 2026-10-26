@@ -572,6 +572,16 @@ describe('extractChangedFiles', () => {
     const quotedDestination =
       'diff --git a/src/a b/old.ts "b/src/caf\\303\\251 b/x.ts"\nrename from src/a b/old.ts\nrename to "src/caf\\303\\251 b/x.ts"';
     expect(extractChangedFiles(quotedDestination)).toEqual(['src/café b/x.ts']);
+    const copyTo =
+      'diff --git a/src/a b/old.ts b/src/new.ts\nsimilarity index 100%\ncopy from src/a b/old.ts\ncopy to src/new.ts';
+    expect(extractChangedFiles(copyTo)).toEqual(['src/new.ts']);
+    // A detected copy into a destination that itself holds ` b/`: the header
+    // offers three boundaries; the `copy to` line, bare and unterminated as git
+    // writes a spaced path there, is read whole.
+    const copyIntoSpaced =
+      'diff --git a/src/a b/old.ts b/src/new b/cfg.ts\nsimilarity index 100%\ncopy from src/a b/old.ts\ncopy to src/new b/cfg.ts';
+    expect(extractChangedFiles(copyIntoSpaced)).toEqual(['src/new b/cfg.ts']);
+    expect(filterDiffByPatterns(copyIntoSpaced, ['src/new b/**'])).toBe('');
   });
 
   it('returns empty array for empty diff', () => {

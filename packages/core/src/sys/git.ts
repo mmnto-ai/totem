@@ -855,9 +855,10 @@ function headerIsAmbiguous(line: string): boolean {
  * 7). An unambiguous header is read as `diffGitDestination` reads it. An
  * ambiguous one is read from the section's own metadata, which git writes
  * before the first hunk and terminates or quotes unambiguously: the `rename to`
- * line of a rename, else the `+++ b/` line of a content change. A deletion
- * (`+++ /dev/null`) and a section with neither line fall back to the header
- * heuristics; git writes no such ambiguous section.
+ * line of a rename or the `copy to` line of a detected copy (both precede any
+ * `Binary files` line), else the `+++ b/` line of a content change. A deletion
+ * (`+++ /dev/null`) and a section with none of these lines fall back to the
+ * header heuristics; git writes no such ambiguous section.
  */
 function diffSectionDestination(section: string): string | null {
   const newline = section.indexOf('\n');
@@ -866,6 +867,7 @@ function diffSectionDestination(section: string): string | null {
   for (const line of section.split('\n').slice(1)) {
     if (line.startsWith('@@') || line.startsWith('Binary files ')) break;
     if (line.startsWith('rename to ')) return decodeGitHeaderPath(line.slice('rename to '.length));
+    if (line.startsWith('copy to ')) return decodeGitHeaderPath(line.slice('copy to '.length));
     if (line.startsWith('+++ ')) {
       const label = decodeGitHeaderPath(line.slice('+++ '.length));
       if (label === '/dev/null') break;
