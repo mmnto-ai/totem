@@ -30,8 +30,9 @@ If `totem spec` fails, report the error and stop — do not proceed to Phase 2.
 - No new failure modes or classes of error
 - No new cross-cutting concerns (logging, telemetry, caching, auth)
 - Touches ≤3 files in a single architectural layer
-- Leaves the branch's diff under the review window (`totem review` names
-  the cut; 50000 characters of code today)
+- Leaves the branch-vs-base diff (three-dot against the base, so main
+  moving does not grow it) under the review window (`totem review` names
+  the cut; 50000 characters of code today, not configurable)
 
 **Draft the design doc (Phase 3) if ANY of:**
 
@@ -51,7 +52,7 @@ If `totem spec` fails, report the error and stop — do not proceed to Phase 2.
   review rounds scale with it. Re-triage when a fold crosses this line,
   and put the ride-or-split question to the operator WITH its price in
   rounds (mmnto-ai/totem#3114: a 26-file diff, re-triaged after two
-  reads with no price named, took seven external rounds)
+  reads, took eight external rounds)
 
 When in doubt, draft the doc. The cost of 10 minutes of design writing
 is always lower than the cost of a multi-round bot review cycle.

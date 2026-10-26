@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "34ca213385614ea8f7aa2a22a5c98009a60d3c51",
+  "readAt": "2026-10-26T16:39:10Z",
+  "findings": [
+    {
+      "id": "3120-r1-F1",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/prepush/SKILL.md",
+      "line": 11,
+      "claim": "Step 4's covariate requirement cannot be met as written past the window, and when it is met it does not mean what the step says: the quoted line comes from the whole-branch scope and slice runs never feed it. A truncated whole-branch run with every lane completing and no WARN reads settled=true while files went unread; a lane abstaining on the truncated payload can never read settled=true however clean the slices are.",
+      "counterexample": "packages/core/src/artifacts/verdict.ts:427-433: deriveSettled = everyLaneCompleted && no WARN|CRITICAL && no decidable fail && reviewedState==='matched'; truncation is not an input. packages/cli/src/commands/shield.ts:2189-2195: --covariate resolves the current lineage via the same getDiffForReview path, and /review-reply runs it with no --diff. packages/cli/src/commands/shield-templates.ts:59: the Gemini lane abstained exactly when the code diff was truncated. mmnto-ai/totem#3118 and comment 6410889508 on mmnto-ai/totem#3114 record both outcomes on one branch: an abstaining lane at d80a2500/855b7ac9, then settled=true at 141a901a over 49k of 85k. Holds: the step must say which line to quote past the window (the whole-branch line plus a disclosure of the slice runs) until mmnto-ai/totem#3118 lands."
+    },
+    {
+      "id": "3120-r1-F2",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/prepush/SKILL.md",
+      "line": 11,
+      "claim": "Slicing over the commits that touch the unseen files until no file is listed has no exit, and it does not review the whole diff's final state: --diff takes a single range with no pathspec, so a slice re-includes every file its commits touch, a single commit or file bigger than the window can never be listed clean, and commit-range slices review intermediate deltas.",
+      "counterexample": "packages/core/src/sys/git.ts:228: safeExec('git', ['diff', trimmed]), a single argument with no pathspec. packages/cli/src/commands/shield-templates.ts:286-300: a partially shown file falls through to a char/line cut and is named 'shown in part', not 'not shown'. Comment 6410889508 on mmnto-ai/totem#3114: the two criticals describe intermediate states the branch fixed in later commits. /review-loop says 'Never loop forever'. Holds: the step needs a stop condition (unsliceable, so disclose and point at mmnto-ai/totem#3118) and must say range slices cover deltas."
+    },
+    {
+      "id": "3120-r1-F3",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/prepush/SKILL.md",
+      "line": 11,
+      "claim": "'every finding of rounds 5 to 7 sat in a file the window had cut' is false as measured: two code findings of rounds 5 and 6 sat in packages/cli/src/commands/run-compiled-rules.ts, which the window delivered whole, and one round-5 finding sat in the changeset, a non-code file the lanes skip by design. Four of the seven findings sat in cut files.",
+      "counterexample": "Inline comments on mmnto-ai/totem#3114: Greptile at run-compiled-rules.ts:584 (round 5), Gemini at run-compiled-rules.ts:629 (round 6), CodeRabbit at .changeset/prepush-range-scope.md:6 (round 5); the cut-file findings are Gemini git.ts:797 (round 5), Gemini git.ts:812 (round 6), CodeRabbit git.ts:819 (round 6), CodeRabbit git.ts:815 (round 7). Cumulative code-diff size by file in git diff order at 141a901a totals 85,345 (the addendum's 85k); run-compiled-rules.ts ends at about 44.8k at 6b9dcf13 and 47.7k-48.0k at b993d425/b43401bd, inside the roughly 49k delivered; the files past about 49.5k are nine or ten, consistent with the addendum's 'nine of 26'. The addendum (6410889508) does not name the nine files. Refuted as worded; mmnto-ai/totem#3118's datum carries the same overbroad claim."
+    },
+    {
+      "id": "3120-r1-F4",
+      "severity": "MINOR",
+      "file": ".claude/skills/preflight/SKILL.md",
+      "line": 54,
+      "claim": "'took seven external rounds' is stale: a round 8 disposition was posted after these edits were written and the PR merged after round 8.",
+      "counterexample": "Comment 6420957569 on mmnto-ai/totem#3114 ('Round 8 disposition'); the PR merged as d37d3bc0 after round 8. Holds: eight."
+    },
+    {
+      "id": "3120-r1-F5",
+      "severity": "MINOR",
+      "file": ".claude/agents/falsification-leg.md",
+      "line": 18,
+      "claim": "'Two such lines cost an external review round each' overstates the causation: neither style-guide line was the sole finding of its round, so neither round would have been avoided.",
+      "counterexample": "Comment 6408825893 on mmnto-ai/totem#3114 (round 5: three findings, the totem-ignore line one of them) and comment 6409431044 (round 6: three findings, the cause-shape line one of them, the round forced anyway by the parser regression). Half-holds: both lines are real style-guide items; reword to 'each surfaced in an external round'."
+    },
+    {
+      "id": "3120-r1-F6",
+      "severity": "MINOR",
+      "file": ".claude/agents/falsification-leg.md",
+      "line": 18,
+      "claim": "The leg rule cites the style guide for an item the guide does not carry: 'a changeset claim wider than the code' is not a .gemini/styleguide.md rule; the other two items are.",
+      "counterexample": ".gemini/styleguide.md:123 ('Every totem-ignore MUST be accompanied by a follow-up ticket') and :133 (pass the original error as the cause). A grep for 'changeset' finds only the unrelated workspace:* item at line 85. Holds; the path is confirmed and the totem-ignore ticket rule is present."
+    },
+    {
+      "id": "3120-r1-F7",
+      "severity": "MINOR",
+      "file": ".claude/skills/prepush/SKILL.md",
+      "line": 11,
+      "claim": "The truncation phrase quoted in step 4 ('exceeds the review window') is not a literal substring of the CLI's output; a different pre-filter warning can fire when the code diff is under the window.",
+      "counterexample": "packages/cli/src/commands/shield-templates.ts:328: 'exceeds the ${limit}-char review window'. packages/cli/src/git.ts:521: 'Diff exceeds 50000 chars (... raw, before file filtering)'. What holds: MAX_DIFF_CHARS = 50_000 (shield-templates.ts:50, mirrored at git.ts:228), not configurable (no caller passes limit, no config field); 'characters of code' is right (the cut applies to the filtered code diff, shield-templates.ts:55); 'not shown' is literal (shield-templates.ts:207). Cosmetic: quote '-char review window'."
+    },
+    {
+      "id": "3120-r1-F8",
+      "severity": "MINOR",
+      "file": ".claude/skills/prepush/SKILL.md",
+      "line": 11,
+      "claim": "Step 4's absolute 'reads settled=true' drops review-loop's honest stop: it gives no exit for a disputed finding or the max-rounds advisory, which pushes toward forcing a settle; and with no review lanes configured step 4 can never be satisfied, which /review-loop step 1 covers and step 4 does not say.",
+      "counterexample": ".claude/skills/review-loop/SKILL.md step 4: 'Stop and report if the CLI's max-rounds advisory fires, or a finding is disputed'; honesty rules: never --override without an explicit human go; step 1: configure review.lanes first. This repository configures two lanes (totem.config.ts:72). Holds: add the stop and the lanes precondition."
+    },
+    {
+      "id": "3120-r1-F9",
+      "severity": "MINOR",
+      "file": ".claude/skills/prepush/SKILL.md",
+      "line": 11,
+      "claim": "Which diff 'the branch's diff' and 'the WHOLE diff' mean depends on the tree state: plain totem review reads the working tree when uncommitted changes exist and falls back to the branch diff only when that is empty, so a fix-loop run reviews the fix, not the branch; the branch scope is three-dot (merge-base), so main moving does not inflate the preflight bullet's size, which the wording does not say.",
+      "counterexample": "packages/cli/src/git.ts, the resolution-order doc above getDiffForReview ('3. --staged or working-tree diff; 4. branch-vs-base when 3 yields nothing'); packages/core/src/sys/git.ts:160-169 ('three-dot ...HEAD resolves merge-base'). Holds: name --branch in step 4 and the three-dot scope in the preflight bullet."
+    },
+    {
+      "id": "3120-r1-F10",
+      "severity": "QUESTION",
+      "file": ".claude/agents/falsification-leg.md",
+      "line": 17,
+      "claim": "Is it intended that the agent file adds a rank policy the canonical section does not carry? 'MINOR unless they change a verdict' pre-ranks a class of finding inside a rendering, 'verdict' is ambiguous between the deposit field and a code verdict path, and 'ranked by what it changes' maps to no rank.",
+      "counterexample": "doctrine/model-tiering.md § Typed deposits (sibling strategy checkout): 'this section is the canonical schema and those files are renderings' and 'the rank is the leg's'. Both new rules stay gather-class (Invariant 1); git show <base>:<file> is a read; the differential rule is conditional and a no-op on a diff with no parser, matcher or reader change. Answered: not intended; the rank clauses are dropped and the rank stays the leg's."
+    },
+    {
+      "id": "3120-r1-F11",
+      "severity": "QUESTION",
+      "file": ".claude/skills/preflight/SKILL.md",
+      "line": 53,
+      "claim": "Two mmnto-ai/totem#3114 claims could not be grounded outside the edits' own narration: 're-triaged after two reads with no price named' (nothing on the PR or the issue records the omission), and 'five of the first six heads went to the bots unsettled' holds by the covariate lines but 'first six' is a chosen window (seven of the nine lines quoted through round 7 read settled=false).",
+      "counterexample": "Covariate lines in comments 6406635869, 6407667763, 6407942636, 6408552755, 6408825893 (settled=false) and 6408957119 (settled=true) on mmnto-ai/totem#3114. Also verified: 26 files (git diff --stat dcf59db3 d37d3bc0); the base filter at git.ts:793 versus the greedy unification supports 'regressed a case the old filter handled'; four leg deposits fit 'four reads'. Answered: the price clause is dropped and the count reworded to seven of nine."
+    }
+  ],
+  "folded": [
+    "3120-r1-F1",
+    "3120-r1-F2",
+    "3120-r1-F3",
+    "3120-r1-F4",
+    "3120-r1-F5",
+    "3120-r1-F6",
+    "3120-r1-F7",
+    "3120-r1-F8",
+    "3120-r1-F9",
+    "3120-r1-F10",
+    "3120-r1-F11"
+  ],
+  "verdict": "Read 1 of the mmnto-ai/totem#3120 build at 34ca2133 against dcf59db3: blocking=0 material=3 minor=6 question=2 folded=11 (counts as typed). Every finding is a wording or measurement correction inside the three instruction files and is folded in the commit that carries this deposit: step 4 names the branch scope, which covariate line to quote past the window and the slice runs' disclosure, a stop condition for slicing, the literal truncation phrase, the review-loop stop; the window claim is reworded to the measured count (four of seven findings in cut files; seven of nine covariate lines unsettled); the round count is eight; the agent file drops its pre-rank and separates the changeset check from the style-guide sweep. F10 and F11 answered in the fold. Leg duration 186 seconds by its own clock; 84k tokens."
+}
