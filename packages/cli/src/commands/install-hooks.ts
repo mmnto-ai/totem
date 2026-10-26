@@ -1365,13 +1365,21 @@ export function buildPrePushHook(options: {
     # Gate-mapped review invocation (mmnto-ai/totem#2473): --gate IS the
     # wiring's declared disposition→exit mapping — not-applicable admissions
     # and completed rounds pass (findings are report-only in hook context),
-    # hard failures and unknown dispositions block. Probe --help for flag
-    # support (the --scope-to-diff defensive-degrade precedent); an older CLI
-    # falls back to the bare sensor form with a visible compat line.
+    # hard failures and unknown dispositions block. --branch makes the gate
+    # read the checked-out HEAD's branch-vs-base range (mmnto-ai/totem#3048):
+    # the diff it grades is that diff regardless of working-tree state (the
+    # stdin ref list is mmnto-ai/totem#2793), and the admission
+    # record names that scope (source and base); the full-file context an
+    # admitted review reads still comes from the checkout. It rides the --gate
+    # probe — every CLI that answers it has carried --branch since 1.53.9 —
+    # while the compat form stays bare, since a CLI without --gate may predate
+    # --branch too. Probe --help for flag support (the --scope-to-diff
+    # defensive-degrade precedent); an older CLI falls back to the bare sensor
+    # form with a visible compat line.
     if $TOTEM_CMD review --help 2>/dev/null | grep -q -- '--gate'; then
-      $TOTEM_CMD review --gate || exit 1
+      $TOTEM_CMD review --gate --branch || exit 1
     else
-      echo "[totem] Hook running review in compat mode (CLI without --gate); 'npm i -g @mmnto/cli@latest' enables the declared gate mapping." >&2
+      echo "[totem] Hook running review in compat mode (CLI without --gate): the declared gate mapping and the branch-vs-base scope are both off, so this run reads uncommitted edits first and the checked-out HEAD's branch diff only on a clean tree; 'npm i -g @mmnto/cli@latest' enables both." >&2
       $TOTEM_CMD review || exit 1
     fi
   fi`;
@@ -1393,10 +1401,26 @@ if [ -n "$TOTEM_CMD" ]; then
     fi
   fi
 
-  # Run deterministic lint
+  # Run deterministic lint over the checked-out HEAD's branch-vs-base range
+  # (mmnto-ai/totem#3048; the stdin ref list is mmnto-ai/totem#2793). The bare
+  # verb reads uncommitted edits first and falls to branch-vs-base only on a
+  # clean tree, so a dirty checkout had this gate lint edits that were not being
+  # pushed and skip the commits that were. --branch forces the branch-vs-base
+  # scope (origin/<base>...HEAD, else the local base) regardless of working-tree
+  # state, and its AST and file-scoped checks read HEAD's bytes, not the disk's;
+  # the range is HEAD's, not the stdin ref list (mmnto-ai/totem#2793). Probe
+  # --help for the flag (the --gate / --scope-to-diff precedent); a CLI without
+  # it runs the bare form behind a visible line naming what it reads.
   if [ -f "${totemDir}/compiled-rules.json" ]; then
-    if ! $TOTEM_CMD lint; then
-      exit 1
+    if $TOTEM_CMD lint --help 2>/dev/null | grep -q -- '--branch'; then
+      if ! $TOTEM_CMD lint --branch; then
+        exit 1
+      fi
+    else
+      echo "[totem] Hook running lint in compat mode (CLI without --branch): this run reads uncommitted edits first and the checked-out HEAD's branch diff only on a clean tree; 'npm i -g @mmnto/cli@latest' makes it read that branch diff on every push." >&2
+      if ! $TOTEM_CMD lint; then
+        exit 1
+      fi
     fi
   fi
 

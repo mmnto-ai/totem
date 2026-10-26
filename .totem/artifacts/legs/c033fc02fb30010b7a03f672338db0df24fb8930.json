@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "c033fc02fb30010b7a03f672338db0df24fb8930",
+  "readAt": "2026-10-25T19:07:00Z",
+  "findings": [
+    {
+      "id": "3048-r2-F1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/run-compiled-rules.ts",
+      "line": 536,
+      "claim": "Under the branch-vs-base scope, the comment/string classification (the AST context) that drives both the AST and regex verdicts is still read from the index, then the disk, not from HEAD. `enrichWithAstContext(additions, { cwd })` is passed no readStrategy, so `packages/core/src/ast-gate.ts:129` runs `git show :<file>` with a disk fallback. `packages/core/src/rule-engine.ts:903` then drops non-code lines from AST matching, and `:741` drops regex violations on them. A staged, uncommitted edit can therefore hide a pushed violation or block a clean push. AstGateOptions already accepts `readStrategy`; passing `blobReadStrategy` would close it.",
+      "counterexample": "MEASURED. (c5) Commit `src/v.ts` with `os.tmpdir()` on line 1 against the default ast-grep rule. Then `git add` an edit that turns line 1 into a `//` comment. `lint --branch` exits 0 (PASS). The same edit left unstaged exits 1. (c5c) After `git rm --cached` with the commented version on disk: exit 0. (c7) A hard-tier regex rule (legitimacy + ruleClass hard) on a committed `console.log(a);`, with a staged comment-out: exit 0, against exit 1 with no edit. (c6h) The reverse: HEAD line 2 is `// note: console.log is banned` (exit 0); stage an edit that makes line 2 code: exit 1, a clean push blocked. Unstaged, the same edit exits 0. The main-dist control also exits 0 on c5 and c7, so this predates the fold, but the fold claims to have closed it."
+    },
+    {
+      "id": "3048-r2-F2",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/diff-parser.ts",
+      "line": 29,
+      "claim": "The diff parser strips the quotes from a C-quoted `+++` path but does not decode its octal escapes. With git's default `core.quotepath=true`, every non-ASCII path reaches the new HEAD reader as a literal like `src/caf\\303\\251.ts`. `git show HEAD:<that>` then fails and HEAD_READ_FAILED hard-errors a clean push. Before the fold, the worktree read failed with ENOENT and was skipped silently. The error's cure text, 'The file may not exist at HEAD', points the wrong way. Paths git always quotes (a double quote, a tab, a backslash) take the same route.",
+      "counterexample": "MEASURED (c11c). A clean `src/café.ts` (`export const z = 1;`) committed on the branch with default git config. `lint --branch`, bare `lint` on a clean tree, and `review --estimate --branch` all exit 1 with 'Failed to read HEAD content for src/caf\\303\\251.ts'. The main dist exits 0 on both `lint --branch` and bare `lint`. With `core.quotepath=false` the same file is graded correctly (c11b: FAIL on a real violation). The staged reader has the identical failure: `--staged` with a new non-ASCII file staged gives STAGED_READ_FAILED. That precedent is pre-existing, but the fold extends it to pre-push and to bare lint."
+    },
+    {
+      "id": "3048-r2-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/rule-engine.ts",
+      "line": 605,
+      "claim": "The regex path's Rust test-span exemption still reads the worktree (`getRustSpansSync` calls `fs.readFileSync` with no reader). An unsaved disk edit that wraps HEAD's violating line in a `#[cfg(test)]` module exempts a pushed violation; removing such a module on disk does the reverse. The ast-grep and tree-sitter paths take their spans from the HEAD content, so only the regex path is affected.",
+      "counterexample": "MEASURED (c8). A hard-tier regex rule `unwrap[(][)]` with fileGlobs `**/*.rs` and HEAD `src/lib.rs` line 2 `fn f() { ... x.unwrap(); }`: exit 1. A disk-only, unstaged rewrite to `#[cfg(test)]` / `mod tests { ... x.unwrap(); }`: exit 0. The main dist also exits 0, so this predates the fold. Reach is consumer-side: the repo's live compiled rules have 0 hard-tier regex rules and 0 hard-tier `.rs` rules (measured)."
+    },
+    {
+      "id": "3048-r2-F4",
+      "severity": "MATERIAL",
+      "file": ".changeset/prepush-range-scope.md",
+      "line": 5,
+      "claim": "Four committed surfaces claim an unsaved edit 'can neither hide a pushed violation nor block a clean push', or that lint's checks 'read HEAD's bytes, not the disk's'. F1 and F3 show both claims are false on the shipped CLI: the AST-context classification reads the index or the disk, and the regex Rust test spans read the disk. The four surfaces are the changeset, `docs/wiki/enforcement-model.md:84`, `docs/wiki/hook-integration.md:14`, and the hook comment at `packages/cli/src/commands/install-hooks.ts:1408` (rendered into `tools/pre-push:44`). The same claim also appears in the `run-compiled-rules.ts:64` option doc and the comment at `:633`. 'Never a silent worktree fallback' also overstates: the classifier falls back to the disk silently.",
+      "counterexample": "READ against the measured c5, c7, c6h and c8 results in F1 and F3."
+    },
+    {
+      "id": "3048-r2-F5",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/run-compiled-rules.ts",
+      "line": 675,
+      "claim": "The HEAD probe skips only mode 120000 (symlinks). A submodule gitlink (mode 160000) whose path matches a rule glob falls through to `git show HEAD:<gitlink>`. The submodule's commit object is not in the superproject, so the read fails and HEAD_READ_FAILED blocks the push. A submodule named like `chart.js` under a `**/*.js` rule would hard-error every push that bumps it.",
+      "counterexample": "MEASURED (c17). `git update-index --cacheinfo 160000,<sha>,src/sub.ts` and commit; the branch diff shows `+Subproject commit <sha>`. `lint --branch` exits 1 with 'Failed to read HEAD content for src/sub.ts'. The main dist exits 0. A gitlink at an extensionless path (`vendor/lib`, rule with no fileGlobs) exits 0 (c17b)."
+    },
+    {
+      "id": "3048-r2-F6",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/diff-parser.ts",
+      "line": 35,
+      "claim": "Pre-existing, outside the fold. For a path containing a space, git writes the `+++ b/<path>` header with a trailing tab, and the parser keeps it in the file name. The changed-files line reports a truncated name (`v.ts`), and a pushed violation in that file is never graded by `lint --branch`.",
+      "counterexample": "MEASURED (c10). Commit `src/a b/v.ts` containing `os.tmpdir()`. 'Changed files (1): v.ts', no AST classification line, exit 0. The main dist gives the same exit 0. Offered for routing to its own issue, not as a block on this fold."
+    },
+    {
+      "id": "3048-r2-F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/run-compiled-rules.test.ts",
+      "line": 1028,
+      "claim": "Four of the six new tests would fail on the pre-fold code: (a), (b), the symlink skip and HEAD_READ_FAILED, because pre-fold ignores `readFromHead` and reads the disk. The disk control and the 'isStaged wins' precedence test pass on pre-fold code by construction. That is acceptable for controls, but the mocked `show` serves the HEAD fixture for both `:path` and `HEAD:path`, so only the call-list assertions discriminate in the precedence test, not its verdict. No test pins the AST-context source (F1), a C-quoted path (F2) or a gitlink (F5).",
+      "counterexample": "READ from the diff. The mock checks `args[0]==='ls-tree' && args[1]==='HEAD'`, which is faithful to the real `['ls-tree','HEAD','--',file]`. The pins on the `HEAD:` prefix, the ls-tree probe, the 120000 skip and the error code are all present."
+    },
+    {
+      "id": "3048-r2-F8",
+      "severity": "MINOR",
+      "file": ".changeset/prepush-range-scope.md",
+      "line": 5,
+      "claim": "'An installed hook takes the new form on its next `totem hook install`, which the managed `prepare` wrapper runs on every install' overstates. The wrapper is wired only when no `prepare` script existed (`packages/cli/src/commands/init-templates.ts:52`). A hook-manager repo gets helper scripts and guidance, not a rewritten hook (`install-hooks.ts` around line 2065). An appended or unbounded managed block declines to `exists` and awaits `--force` (`installGitHook`, around line 1800).",
+      "counterexample": "READ only."
+    },
+    {
+      "id": "3048-r2-F9",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/lint.ts",
+      "line": 318,
+      "claim": "Run from a repo subdirectory, `lint --branch` reports '23 rules' where the repo's compiled-rules.json carries 1, and passes a pushed violation, on both the main dist and the fold dist. Is that config or rule resolution from a subdirectory known and intended? Git runs pre-push at the top level, so the hook path is not affected.",
+      "counterexample": "MEASURED (c18). Committed `src/deep/v.ts` with a violation and a disk edit. From `src/` and `src/deep/`: exit 0, '23 rules'. Where the 23 rules come from is not settled."
+    }
+  ],
+  "folded": [
+    "3048-r2-F1",
+    "3048-r2-F2",
+    "3048-r2-F3",
+    "3048-r2-F4",
+    "3048-r2-F5",
+    "3048-r2-F7",
+    "3048-r2-F8"
+  ],
+  "verdict": "Read 2 of the mmnto-ai/totem#3048 build, scoped to the first fold, at c033fc02 against 7f032d47: blocking=2 material=4 minor=2 question=1 folded=7 (counts as typed). NOT CONVERGED by its own line: the classifier, quoted paths and the Rust span source. Held, measured: the HEAD reader on an edited-away, a deleted-on-disk and a disk-only violation, a renamed file, CRLF both ways, a file-scoped requirement, the clean-tree fallback with an untracked file, --staged with nothing staged, a symlink skipped, the estimator following the reader, the flag conflicts, parity of tools/pre-push with the builder. Folded in 349cd82f: the reader passed to the classifier; decodeGitHeaderPath for the parser, the changed-files listing and the ignore filter; the span exemption through the reader; the gitlink skip; the prose and the reinstall claim reworded; tests for each. Routed, not folded: F6 (the changed-files listing's ambiguity for a bare path carrying a space before b/) and F9 (lint from a subdirectory loads another rule set), each to its own issue."
+}

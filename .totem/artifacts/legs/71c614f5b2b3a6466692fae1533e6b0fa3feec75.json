@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "71c614f5b2b3a6466692fae1533e6b0fa3feec75",
+  "readAt": "2026-10-25T19:41:00Z",
+  "findings": [
+    {
+      "id": "3048-r3-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/diff-parser.ts",
+      "line": 33,
+      "claim": "decodeGitHeaderPath only treats a header as quoted if it ends in a double quote. Git appends a tab after a +++ label that contains a space, quoted or not, so a quoted spaced path keeps its quotes and escapes and every addition in that file goes to a name that matches no glob and exists nowhere. A pushed violation passes the branch gate, and the --staged and uncommitted scopes too.",
+      "counterexample": "MEASURED: commit src/my café.ts containing console.log under default core.quotepath. git diff shows `+++ \"b/src/my caf\\303\\251.ts\"<TAB>`. `lint --branch` with the hard regex rule (glob **/*.ts) exits 0 PASS with no 'AST classified' line. Same PASS for an ast-grep os.tmpdir() rule, for `lint --staged` on a new staged file, and for the uncommitted scope. With the glob removed, the violation is reported under the garbled name `\"b/src/my caf\\303\\251.ts\":2`. A quote plus a space (src/q\" x.ts, index-only) also PASSes. Unit: decodeGitHeaderPath of the quoted label plus a trailing tab returns it unchanged with the quotes."
+    },
+    {
+      "id": "3048-r3-F2",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/run-compiled-rules.ts",
+      "line": 567,
+      "claim": "Same root as F1: the undecoded name reaches the HEAD reader on a rule path, so a clean push hard-errors with HEAD_READ_FAILED.",
+      "counterexample": "MEASURED: regex rule console.log with fileGlobs ['**/*'], requires {pattern:'LOGGING_OK', scope:'file'} and examples. Committed `src/my café.ts` = '// LOGGING_OK' plus console.log, so the requirement is met. `lint --branch` exits 1 with `[Totem Error] Failed to read HEAD content for \"b/src/my caf\\303\\251.ts\"`. Control: the same file named src/plain.ts PASSes."
+    },
+    {
+      "id": "3048-r3-F3",
+      "severity": "MATERIAL",
+      "file": ".changeset/prepush-range-scope.md",
+      "line": 6,
+      "claim": "The changeset says a C-quoted header 'is unquoted and its escapes decoded ... so such a file is found and graded instead of silently skipped', and that the staged reader 'is cured by the same decode'. Both are false for any quoted path that also has a space. The spec's failure-mode row (.totem/specs/3048.md:141) says HEAD_READ_FAILED is 'reachable only for a path git itself cannot render', which F2 falsifies, and its unknown-escape row says every form git writes is decoded and tested.",
+      "counterexample": "MEASURED: F1 (silent skip on --branch and --staged) and F2 (HEAD_READ_FAILED on a renderable path). READ: the docstring at packages/core/src/diff-parser.ts:24 says a space gives a bare path followed by a tab, but git writes the tab after quoted labels too."
+    },
+    {
+      "id": "3048-r3-F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/compiler.test.ts",
+      "line": 347,
+      "claim": "The quoted-with-space fixture `\"b/café \\\"x\\\".ts\"` has no trailing tab, a form git never writes for a label with a space. The test therefore passes while the real form fails. No test covers a quoted header followed by a tab, and the spec's decode invariant is locked only on tab-free quoted fixtures.",
+      "counterexample": "MEASURED: git writes `+++ \"b/src/q\\\" x.ts\"<TAB>` and `+++ \"b/src/my caf\\303\\251.ts\"<TAB>` (cat -A shows ^I). Fed that real header, decodeGitHeaderPath returns it unchanged, while the test's tab-free variant decodes."
+    },
+    {
+      "id": "3048-r3-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 816,
+      "claim": "extractChangedFiles and filterDiffByPatterns (line 794) only recognise a diff --git line with both sides quoted or both bare. A rename from an ASCII name to a non-ASCII one quotes only the b side, so the file drops out of the changed-files list and the ignore filter cannot drop it. The lint verdict is unaffected; this is not disclosed.",
+      "counterexample": "MEASURED: `git mv src/big.ts src/café.ts` plus an added console.log gives `diff --git a/src/big.ts \"b/src/caf\\303\\251.ts\"`. lint --branch prints 'Changed files (0): ' and still FAILs correctly. Unit: extractChangedFiles on that line returns [], and filterDiffByPatterns(diff, ['caf*']) keeps the section."
+    },
+    {
+      "id": "3048-r3-F6",
+      "severity": "MINOR",
+      "file": ".changeset/prepush-range-scope.md",
+      "line": 6,
+      "claim": "'ambiguous for a path containing a space, so such a path is still reported truncated' overstates. The greedy bare pattern truncates only a path that contains ' b/'. The same wording is in packages/core/src/sys/git.ts:815 and the spec row at .totem/specs/3048.md:146.",
+      "counterexample": "MEASURED: src/my file.ts and src/a  b.ts are both listed in full in 'Changed files'. READ: /^diff --git a\\/.+ b\\/(.+)$/ on `a/src/a b/v.ts b/src/a b/v.ts` captures 'v.ts'."
+    },
+    {
+      "id": "3048-r3-F7",
+      "severity": "MINOR",
+      "file": ".totem/specs/3048.md",
+      "line": 151,
+      "claim": "The invariant 'a divergent disk or index copy cannot change the verdict in either direction' is locked for the classifier in one direction only. The new test covers HEAD code with an index/disk comment; nothing locks HEAD comment with index/disk code. The (a)/(b) pair covers AST rules, not the classifier.",
+      "counterexample": "READ: run-compiled-rules.test.ts:1151 is the only classifier-source test. MEASURED: the behaviour is right today (c6h staged, c6d disk: PASS), so this is a lock gap, not a defect."
+    },
+    {
+      "id": "3048-r3-F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 890,
+      "claim": "This comment says extractChangedFiles 'spells a non-ASCII path the C-quoted way'. After the fold it decodes, so the comment is stale; line 77's 'which is unquoted' is also inaccurate. The legs owed set itself reads the raw -z list (legReachPaths), so legs matching is unaffected.",
+      "counterexample": "MEASURED: lint --branch on src/café.ts narrates 'Changed files (1): src/café.ts', decoded."
+    },
+    {
+      "id": "3048-r3-F9",
+      "severity": "QUESTION",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 815,
+      "claim": "'tracked separately' (also the changeset's '(tracked separately)' and the spec's 'its own issue'): which issue? Two tracker searches found only an earlier bug about spaced paths in extractChangedFiles, already done. Separately: the uncommitted scope's classifier still reads the index first while its diff is `git diff HEAD` (worktree), so it is now the only scope whose classifier can read bytes other than the ones being linted. That is pre-existing and noted as an open question in the spec; whether it is a follow-up is for the author to rule.",
+      "counterexample": "READ: gh issue search on the repository with the datum's nouns, open and closed. packages/core/src/ast-gate.ts:117-137 (readStrategy, otherwise `git show :path` then disk)."
+    }
+  ],
+  "folded": [
+    "3048-r3-F1",
+    "3048-r3-F2",
+    "3048-r3-F3",
+    "3048-r3-F4",
+    "3048-r3-F5",
+    "3048-r3-F6",
+    "3048-r3-F7",
+    "3048-r3-F8",
+    "3048-r3-F9"
+  ],
+  "verdict": "Read 3 of the mmnto-ai/totem#3048 build, scoped to the second fold, at 71c614f5 against 7f032d47: blocking=2 material=2 minor=4 question=1 folded=9 (counts as typed). NOT CONVERGED by its own line, on one root: a path git both C-quotes and tab-terminates (a quoted path with a space) escaped the decoder. Held, measured: every read-2 case at the verdict HEAD warrants (staged and index-removed comment-outs, both reverse cases, a clean and a violating non-ASCII file, the gitlink, the Rust span both ways); CJK, emoji, double spaces, quotepath off, --staged on a non-ASCII file, a deleted non-ASCII file, a quote, an octal escape, a tab inside and at the end of a name, a bracket pathspec beside a symlink; the classifier and the span exemption taking the reader; parity of tools/pre-push with the builder. Folded in c4d5c133: the trailing tab stripped before the quoted check, with tests on git's real header bytes; one destination parser for a diff --git line with either side quoted, with ignore-filter tests; the truncation wording narrowed to a bare path containing ' b/'; the legs comments corrected; the classifier's other direction locked; the follow-ups filed and cited as mmnto-ai/totem#3110, mmnto-ai/totem#3111 and mmnto-ai/totem#3112."
+}

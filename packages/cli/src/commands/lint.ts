@@ -330,7 +330,14 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     // passing vacuously behind a green exit (mmnto-ai/totem-strategy#971,
     // Prop 309). Its lesson-kind targets drive the corpus-bearing check.
     config,
-    isStaged: !!options.staged,
+    // The blob reader follows the RESOLVED scope, not the raw flag (the
+    // estimator's rule, mmnto-ai/totem#1732): the index for a staged diff, HEAD
+    // for a branch-vs-base diff — forced by --branch / --base or reached by the
+    // clean-tree fallback — and the worktree otherwise (mmnto-ai/totem#3048).
+    // A --staged run whose staged diff is empty falls to the branch scope and
+    // now reads HEAD, which is what the index equals when nothing is staged.
+    isStaged: result.source === 'staged',
+    readFromHead: result.source === 'branch-vs-base',
     regexTimeoutMode: timeoutMode,
     astParseMode,
   });

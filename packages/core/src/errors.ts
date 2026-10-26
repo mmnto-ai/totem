@@ -30,6 +30,8 @@ export type TotemErrorCode =
   | 'UPGRADE_HASH_NOT_FOUND'
   | 'UPGRADE_HASH_AMBIGUOUS'
   | 'STAGED_READ_FAILED'
+  /** A `git show HEAD:<file>` read failed under the branch-vs-base lint scope (mmnto-ai/totem#3048). */
+  | 'HEAD_READ_FAILED'
   | 'UPGRADE_CLOUD_UNSUPPORTED'
   | 'STALE_MANIFEST'
   | 'FLAG_CONFLICT'

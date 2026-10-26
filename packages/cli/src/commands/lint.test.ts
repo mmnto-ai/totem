@@ -435,3 +435,71 @@ describe('lintCommand diff-scope forwarding (#2090/#2091)', () => {
     expect(optsArg).toMatchObject({ warnNarrowScope: true });
   });
 });
+
+// ─── Blob-reader scope selection (mmnto-ai/totem#3048) ──
+// The reader follows the RESOLVED scope the diff producer reports, never the
+// raw flag (the estimator's rule, mmnto-ai/totem#1732): the index for a staged
+// diff, HEAD for a branch-vs-base diff, the worktree otherwise. A `--staged`
+// run whose staged diff is empty falls to the branch scope and must read HEAD.
+// Mirrors shield-estimate.test.ts; before this block the mapping in lint.ts had
+// no direct coverage (the installed hook's review lane, round 5 of
+// mmnto-ai/totem#3114).
+
+describe('lintCommand blob-reader scope selection (mmnto-ai/totem#3048)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+    getDiffForReviewMock.mockClear();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.resetModules();
+  });
+
+  it.each([
+    ['uncommitted', false, false] as const,
+    ['staged', true, false] as const,
+    ['branch-vs-base', false, true] as const,
+    ['explicit-range', false, false] as const,
+  ])(
+    'source=%s hands runCompiledRules isStaged=%s readFromHead=%s, whatever the raw flag says',
+    async (source, isStaged, readFromHead) => {
+      const runCompiledRulesMock = vi.fn(async (_opts: unknown) => ({
+        violations: [],
+        rules: [],
+        output: '',
+        findings: [],
+        regexTimeouts: [],
+        astParseFailures: [],
+      }));
+      vi.doMock('./run-compiled-rules.js', () => ({
+        runCompiledRules: (opts: unknown) => runCompiledRulesMock(opts),
+      }));
+      getDiffForReviewMock.mockResolvedValueOnce({
+        diff: 'diff --git a/app.ts b/app.ts\n',
+        source,
+      } as { diff: string });
+
+      const { lintCommand } = await import('./lint.js');
+      // The raw flag is the OPPOSITE of the resolved scope wherever one exists,
+      // so a regression to `isStaged: !!options.staged` fails the row.
+      await lintCommand(source === 'staged' ? {} : { staged: true });
+
+      expect(runCompiledRulesMock).toHaveBeenCalledTimes(1);
+      const opts = runCompiledRulesMock.mock.calls[0]![0] as {
+        isStaged?: boolean;
+        readFromHead?: boolean;
+      };
+      expect(opts.isStaged).toBe(isStaged);
+      expect(opts.readFromHead).toBe(readFromHead);
+    },
+  );
+});

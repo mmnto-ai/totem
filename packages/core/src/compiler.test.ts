@@ -20,6 +20,7 @@ import {
   validateRegex,
 } from './compiler.js';
 import { CompiledRuleSchema } from './compiler-schema.js';
+import { decodeGitHeaderPath } from './diff-parser.js';
 import { cleanTmpDir, makeRuleEngineCtx } from './test-utils.js';
 
 let ctx: RuleEngineContext;
@@ -287,6 +288,103 @@ diff --git a/b.ts b/b.ts
     for (const a of additions) {
       expect(a.file).toBe('src/test.ts');
     }
+  });
+
+  // mmnto-ai/totem#3048 read 2 — git writes a non-ASCII path C-quoted under its
+  // default core.quotepath, as octal escapes of the UTF-8 bytes. Before the
+  // decode the file name carried the literal escape text, so `git show` and the
+  // file system never found the file and a pushed violation in it was skipped.
+  it('decodes a C-quoted header path (default core.quotepath) to its UTF-8 name', () => {
+    const diff = [
+      'diff --git "a/src/caf\\303\\251.ts" "b/src/caf\\303\\251.ts"',
+      '--- "a/src/caf\\303\\251.ts"',
+      '+++ "b/src/caf\\303\\251.ts"',
+      '@@ -1,2 +1,3 @@',
+      ' line1',
+      '+added line',
+      ' line2',
+    ].join('\n');
+
+    const additions = extractAddedLines(diff);
+    expect(additions).toHaveLength(1);
+    expect(additions[0]!.file).toBe('src/café.ts');
+  });
+
+  it('strips the tab git appends after a bare path that contains a space', () => {
+    // A path with a space is not quoted; git ends the header with a tab instead.
+    const diff = [
+      'diff --git a/src/a b/v.ts b/src/a b/v.ts',
+      '--- a/src/a b/v.ts\t',
+      '+++ b/src/a b/v.ts\t',
+      '@@ -1,2 +1,3 @@',
+      ' line1',
+      '+added line',
+      ' line2',
+    ].join('\n');
+
+    const additions = extractAddedLines(diff);
+    expect(additions).toHaveLength(1);
+    expect(additions[0]!.file).toBe('src/a b/v.ts');
+  });
+
+  // Read 3 of mmnto-ai/totem#3048: git appends the tab after a label whenever the
+  // path contains a space, quoted or not, so a quoted spaced path is both. A
+  // decoder that tests the closing quote before stripping the tab misses it.
+  it('decodes a quoted header that git also tab-terminates (a quoted path with a space)', () => {
+    const diff = [
+      'diff --git "a/src/my caf\\303\\251.ts" "b/src/my caf\\303\\251.ts"',
+      '--- "a/src/my caf\\303\\251.ts"\t',
+      '+++ "b/src/my caf\\303\\251.ts"\t',
+      '@@ -1,2 +1,3 @@',
+      ' line1',
+      '+added line',
+      ' line2',
+      'diff --git "a/src/q\\" x.ts" "b/src/q\\" x.ts"',
+      '--- "a/src/q\\" x.ts"\t',
+      '+++ "b/src/q\\" x.ts"\t',
+      '@@ -1,2 +1,3 @@',
+      ' line1',
+      '+added line',
+      ' line2',
+    ].join('\n');
+
+    const additions = extractAddedLines(diff);
+    expect(additions).toHaveLength(2);
+    expect(additions[0]!.file).toBe('src/my café.ts');
+    expect(additions[1]!.file).toBe('src/q" x.ts');
+  });
+});
+
+describe('decodeGitHeaderPath', () => {
+  it('returns a plain path unchanged', () => {
+    expect(decodeGitHeaderPath('b/src/foo.ts')).toBe('b/src/foo.ts');
+  });
+
+  it('decodes octal escapes as UTF-8 bytes, including a multi-byte sequence split across escapes', () => {
+    expect(decodeGitHeaderPath('"b/src/caf\\303\\251.ts"')).toBe('b/src/café.ts');
+    expect(decodeGitHeaderPath('"b/\\346\\227\\245\\346\\234\\254.md"')).toBe('b/日本.md');
+  });
+
+  it('decodes the one-letter C escapes git writes for a quote, a backslash and a tab', () => {
+    expect(decodeGitHeaderPath('"b/say \\"hi\\".ts"')).toBe('b/say "hi".ts');
+    expect(decodeGitHeaderPath('"b/back\\\\slash.ts"')).toBe('b/back\\slash.ts');
+    expect(decodeGitHeaderPath('"b/tab\\there.ts"')).toBe('b/tab\there.ts');
+  });
+
+  it('keeps a backslash that is not an escape and keeps raw non-ASCII inside quotes (core.quotepath off)', () => {
+    expect(decodeGitHeaderPath('"b/odd\\q.ts"')).toBe('b/odd\\q.ts');
+    // A quoted label with a space is tab-terminated, as git writes it.
+    expect(decodeGitHeaderPath('"b/café \\"x\\".ts"\t')).toBe('b/café "x".ts');
+  });
+
+  it('strips the trailing tab before the quoted check, so a quoted spaced path decodes', () => {
+    expect(decodeGitHeaderPath('"b/src/my caf\\303\\251.ts"\t')).toBe('b/src/my café.ts');
+    expect(decodeGitHeaderPath('"b/src/q\\" x.ts"\t')).toBe('b/src/q" x.ts');
+  });
+
+  it('removes only a trailing tab from a bare path', () => {
+    expect(decodeGitHeaderPath('b/src/a b/v.ts\t')).toBe('b/src/a b/v.ts');
+    expect(decodeGitHeaderPath('b/src/a\tb/v.ts')).toBe('b/src/a\tb/v.ts');
   });
 });
 

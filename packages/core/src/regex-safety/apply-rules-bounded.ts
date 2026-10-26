@@ -94,20 +94,31 @@ export async function applyRulesToAdditionsBounded(
 
   const regexRules = rules.filter((r) => r.engine === 'regex' || !r.engine);
 
+  // Rust test-span exemption (#2397). The spans come from the same bytes the
+  // rest of the lint judges (mmnto-ai/totem#3048 read 2): the caller's
+  // `readStrategy` when set — the index under `--staged`, HEAD under the
+  // branch-vs-base scope, so a disk-only edit that wraps a pushed line in a
+  // `#[cfg(test)]` module cannot exempt it — else the worktree. The reader owns
+  // its own failure contract and is not caught here (see `getFileText` below);
+  // a `null` from it, or a disk read that fails, yields no spans, so the rule
+  // FIRES — the exemption fails toward flagging, never toward suppression.
   const rustTestSpansCache = new Map<string, { startLine: number; endLine: number }[]>();
   const getRustSpans = async (file: string) => {
     if (rustTestSpansCache.has(file)) return rustTestSpansCache.get(file)!;
-    try {
-      const fullPath = path.resolve(options.repoRoot, file);
-      const content = await fs.promises.readFile(fullPath, 'utf-8');
-      const spans = getRustTestSpans(content);
-      rustTestSpansCache.set(file, spans);
-      return spans;
-      // totem-context: span-read failure yields no spans → no exemption → the rule still FIRES; the exemption fails toward flagging, never toward suppression.
-    } catch {
-      rustTestSpansCache.set(file, []);
-      return [];
+    let content: string | null = null;
+    if (options.readStrategy) {
+      content = await options.readStrategy(file);
+    } else {
+      try {
+        content = await fs.promises.readFile(path.resolve(options.repoRoot, file), 'utf-8');
+        // totem-context: span-read failure yields no spans → no exemption → the rule still FIRES; the exemption fails toward flagging, never toward suppression.
+      } catch {
+        content = null;
+      }
     }
+    const spans = content === null ? [] : getRustTestSpans(content);
+    rustTestSpansCache.set(file, spans);
+    return spans;
   };
 
   // Prop 310 § Design 8 — whole-file text for a `requires: {scope: file}` check,

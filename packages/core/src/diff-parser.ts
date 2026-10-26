@@ -2,6 +2,63 @@ import type { DiffAddition } from './compiler-schema.js';
 
 // ─── Diff parsing ───────────────────────────────────
 
+/** The single-character C escapes git's path quoting writes, by the letter after the backslash. */
+const C_ESCAPES: Readonly<Record<string, number>> = Object.freeze({
+  '\\': 0x5c,
+  '"': 0x22,
+  a: 0x07,
+  b: 0x08,
+  t: 0x09,
+  n: 0x0a,
+  v: 0x0b,
+  f: 0x0c,
+  r: 0x0d,
+});
+
+/**
+ * Decode a path the way git wrote it in a `+++`/`---` diff header
+ * (mmnto-ai/totem#3048, read 2). Under `core.quotepath` (on by default) git
+ * C-quotes a path carrying a byte outside printable ASCII — `src/café.ts`
+ * arrives as `"src/caf\303\251.ts"` — and always quotes one carrying a double
+ * quote, a backslash or a control character, writing each such byte as a
+ * three-digit octal escape or a one-letter C escape. A path with a space is
+ * followed by a tab so its end is unambiguous — quoted or not: a quoted spaced
+ * path arrives as `"b/src/my caf\303\251.ts"<TAB>` (read 3).
+ *
+ * The trailing tab goes first; a quoted header is then unquoted and its
+ * escapes decoded to UTF-8. A path that was never quoted or tabbed comes back
+ * byte-identical. Without this a quoted path reached `git show` and the file
+ * system as the literal escape text, so the file was never found.
+ */
+export function decodeGitHeaderPath(headerPath: string): string {
+  const label = headerPath.replace(/\t$/, '');
+  const quoted = label.length >= 2 && label.startsWith('"') && label.endsWith('"');
+  if (!quoted) return label;
+  const chars = Array.from(label.slice(1, -1));
+  const bytes: number[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i]!;
+    if (ch !== '\\') {
+      bytes.push(...Buffer.from(ch, 'utf-8'));
+      continue;
+    }
+    const octal = chars.slice(i + 1, i + 4).join('');
+    if (/^[0-7]{3}$/.test(octal)) {
+      bytes.push(parseInt(octal, 8));
+      i += 3;
+      continue;
+    }
+    const next = chars[i + 1];
+    if (next !== undefined && next in C_ESCAPES) {
+      bytes.push(C_ESCAPES[next]!);
+      i += 1;
+      continue;
+    }
+    bytes.push(0x5c); // a backslash git did not write an escape for: kept as is
+  }
+  return Buffer.from(bytes).toString('utf-8');
+}
+
 /**
  * Extract added lines from a unified diff.
  * Returns only lines that start with `+` (excluding `+++` file headers).
@@ -26,11 +83,9 @@ export function extractAddedLines(diff: string): DiffAddition[] {
     // content happens to start with ++ (e.g., template literal test fixtures
     // containing embedded diff headers like "+++ b/some-file.ts").
     if (!insideHunk && rawLine.startsWith('+++')) {
-      let pathPart = rawLine.slice(4); // strip "+++ "
-      // Strip surrounding quotes (git adds them for paths with spaces)
-      if (pathPart.startsWith('"') && pathPart.endsWith('"')) {
-        pathPart = pathPart.slice(1, -1);
-      }
+      // Decode the path as git wrote it: C-quoting for non-ASCII and special
+      // bytes, a trailing tab after a path with a space (decodeGitHeaderPath).
+      const pathPart = decodeGitHeaderPath(rawLine.slice(4)); // strip "+++ "
       // Strip the "b/" prefix git uses for the destination file
       currentFile = pathPart.startsWith('b/') ? pathPart.slice(2) : pathPart;
       prevLineContent = null;

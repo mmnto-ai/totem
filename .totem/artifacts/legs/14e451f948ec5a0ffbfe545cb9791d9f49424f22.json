@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "14e451f948ec5a0ffbfe545cb9791d9f49424f22",
+  "readAt": "2026-10-25T18:43:00Z",
+  "findings": [
+    {
+      "id": "3048-r1-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/rule-engine.ts",
+      "line": 1030,
+      "claim": "lint --branch takes its file set and added-line numbers from origin/<base>...HEAD, but AST-engine rules (ast-grep at rule-engine.ts:1030, tree-sitter at :946) read the file content from the working tree. A content reader is passed only for --staged (run-compiled-rules.ts:618, lint.ts:333). With a dirty tree, the gate grades unsaved bytes at the branch diff's line numbers: an unsaved fix hides a pushed error-severity violation, and an unsaved edit blocks a correct push. The fix's central claim, 'a dirty checkout's unsaved edits are never what the gate reads', is therefore false for AST rules on any file both the branch and the working tree touch. Remedy precedent: the staged reader; the branch scope needs an equivalent that reads blobs from HEAD.",
+      "counterexample": "MEASURED with the worktree dist in a scratch repo, using one ast-grep rule (pattern os.tmpdir(), severity error, globs **/*.ts). (a) src/c.ts committed with `os.tmpdir()` on line 2: clean tree, lint --branch FAIL, exit 1. Edit line 2 on disk only, or delete the file on disk: lint --branch PASS, 0 violations, exit 0, while the pushed commit still carries the violation. (b) src/c.ts committed clean at a branch-added line 2: clean tree PASS. Write `os.tmpdir()` on line 2 on disk only: lint --branch FAIL, exit 1, so the hook blocks a push whose commits are clean. Not a regression against bare lint (which reads the working tree throughout), but the defect class mmnto-ai/totem#3048 names survives the fix."
+    },
+    {
+      "id": "3048-r1-F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/prepush-range-scope.md",
+      "line": 5,
+      "claim": "The changeset and the commit message say a gate run 'now records branch-vs-base, the base it diffed and the --branch selector'. The forced branch path in getDiffForReview never sets selectorForm (git.ts:440-459). The admission scope for a non-empty diff takes `selectorForm: input.diffResult.selectorForm ?? null` (shield.ts:1871-1875), and the admitted arm passes it through (shield.ts:2399). Only the empty no-diff arm falls back to requestedSelectorForm and records '--branch' (shield.ts:1861). Every run with a non-empty diff (admitted, all-non-code, filtered-empty, all-generated) records selectorForm null, and head is null for branch-vs-base too.",
+      "counterexample": "MEASURED: scratch repo, branch feat with one committed .md change and an uncommitted .ts edit. `review --gate --branch` exited 0 with not-applicable (all-non-code), and the admission record's scope was {\"source\":\"branch-vs-base\",\"base\":\"origin/main\",\"head\":null,\"selectorForm\":null}. Source and base hold; the claimed --branch selector is absent."
+    },
+    {
+      "id": "3048-r1-F3",
+      "severity": "MATERIAL",
+      "file": ".changeset/prepush-range-scope.md",
+      "line": 5,
+      "claim": "The disclosure says a dirty-tree push whose base resolves nowhere meets the base-resolution error 'with its `git fetch origin <base>` cure'. That cure is the getGitBranchDiffResult arm only (packages/core/src/sys/git.ts:182-186). When getDefaultBranch itself fails (no origin/HEAD symbolic ref and no main or master locally or on origin, packages/core/src/sys/git.ts:129-133), the error names `git remote set-head origin --auto` or `--base`. The managed hook cannot pass --base, and set-head needs an origin. The lint step runs on every tier, so this now blocks standard-tier pushes too. The commit message makes the same claim.",
+      "counterexample": "MEASURED: `git init -b trunk`, no remote, branch feat with one commit and a dirty edit, compiled-rules.json present. `lint --branch` printed 'Could not determine default branch. Neither 'main' nor 'master' found locally...' with 'Fix: Run 'git remote set-head origin --auto' ... or pass --base explicitly.' and exited 1. Bare `lint`, the pre-fix hook form, exited 0 PASS."
+    },
+    {
+      "id": "3048-r1-F4",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 84,
+      "claim": "Two committed surfaces state the lint and shield steps read the branch diff 'never the working tree': enforcement-model.md:84 says it in those words, and hook-integration.md:14 says 'whatever the working tree holds uncommitted'. The changeset and the hook comment at install-hooks.ts:1371 say the same ('never what the shield grades'). For lint this is false through F1. For review, see F6.",
+      "counterexample": "MEASURED through F1's cases (lint --branch verdict changes with working-tree-only edits). For review: READ at shield.ts:2446-2481."
+    },
+    {
+      "id": "3048-r1-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1416,
+      "claim": "Both compat lines say, unconditionally, that the working tree is what the run reads: lint at :1416, review at :1380, and enforcement-model.md:84 says the same. Bare lint and bare review fall to branch-vs-base on a clean tree (git.ts:491-501), so on a clean tree the line misstates the scope. Separately, the review compat arm fires on a missing --gate, not a missing --branch. A CLI from 1.53.9 to 1.117.x has --branch but runs bare review, so the doc's 'a CLI too old for the flag' does not describe the review trigger.",
+      "counterexample": "READ: a clean-tree push with a CLI lacking --branch prints 'the working tree is linted, not the pushed range' while bare lint diffs origin/<base>...HEAD. A 1.60-era CLI (has --branch, no --gate) on a dirty tree runs bare review over the working tree, with no --branch attempted."
+    },
+    {
+      "id": "3048-r1-F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield.ts",
+      "line": 2477,
+      "claim": "On an admitted run, `review --gate --branch` still reads working-tree bytes for the changed files. It builds the full-file LLM context from disk (buildFileContext, shield.ts:100-140), extracts totem-context annotations and smart hints from disk (shield-hints.ts:45), and appends Trap Ledger override events from those annotations (shield.ts:2455-2471). Under --gate, findings are report-only, so this does not move the exit, which is why this is MINOR. It does contradict 'never what the shield grades' (install-hooks.ts:1371) and leaves ledger records that cite unpushed annotations.",
+      "counterexample": "READ only. An admitted run was not measured because it needs an LLM lane. Input: a branch changes src/a.ts, and the working tree adds an uncommitted `// totem-context:` line to src/a.ts. Expected: the hint feeds the review and a ledger override event is written for a line that is not being pushed."
+    },
+    {
+      "id": "3048-r1-F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/pre-push-gate-matrix.test.ts",
+      "line": 49,
+      "claim": "No test pins the new review compat wording, the line that names the working tree and 'push-range scope' and that enforcement-model.md:84 cites. The structural regex `/Hook running review in compat mode[^\\n]*\" >&2/` and the behavioural `toContain('compat mode')` both pass on the pre-fix wording. The file's header doc comment (lines 4-6) also still says it invokes `review --gate`.",
+      "counterexample": "MEASURED: the pre-fix render's review compat line does not contain 'working tree' and still satisfies both existing assertions; a grep of the test sources finds no pin of the new text."
+    },
+    {
+      "id": "3048-r1-F8",
+      "severity": "MINOR",
+      "file": "docs/wiki/hook-integration.md",
+      "line": 14,
+      "claim": "hook-integration.md:14 calls it 'the branch-vs-base diff the push carries', and workflow-automation.md:47 says 'over the pushed range'. Neither discloses that the range is HEAD's rather than the stdin ref list (mmnto-ai/totem#2793), and hook-integration.md does not say what an older CLI does or that the lint step runs only when compiled-rules.json exists. enforcement-model.md:84 does carry the mmnto-ai/totem#2793 disclosure.",
+      "counterexample": "READ: on a checkout of branch A, `git push origin B` grades A's diff, while these two pages read as if the pushed range is graded."
+    },
+    {
+      "id": "3048-r1-F9",
+      "severity": "QUESTION",
+      "file": ".changeset/prepush-range-scope.md",
+      "line": 5,
+      "claim": "Do installed hooks pick up the new form without a reinstall? upgradePrePushHookIfNeeded returns false for any hook already containing verify-manifest (install-hooks.ts:2747), so current installs keep `lint` / `review --gate` until `totem hook install` repairs the drift doctor senses (doctor.ts:439-475). The changeset does not tell consumers to reinstall. Is that the house convention for template changes?",
+      "counterexample": "READ only: a consumer upgrades the CLI and pushes from a dirty tree; their installed hook still runs bare lint until they reinstall."
+    }
+  ],
+  "folded": [
+    "3048-r1-F1",
+    "3048-r1-F2",
+    "3048-r1-F3",
+    "3048-r1-F4",
+    "3048-r1-F5",
+    "3048-r1-F6",
+    "3048-r1-F7",
+    "3048-r1-F8",
+    "3048-r1-F9"
+  ],
+  "verdict": "Read 1 of the mmnto-ai/totem#3048 hook fix, at 14e451f9 against 7f032d47: blocking=1 material=3 minor=4 question=1 folded=9 (counts as typed). NOT CONVERGED by its own line: the branch scope's AST and file-scoped checks read the worktree, so the hook claim was false for AST rules. Held, measured: parity of tools/pre-push with the builder; the behavioral matrix under sh with a stub CLI on both the post-fix render and the pre-fix one (every new or updated case fails pre-fix); the step order and the absence of any stdin read; the regex-diff half of the claim on a dirty tree. Folded in c033fc02: a HEAD blob reader on the staged reader's seam, chosen by the resolved scope in lint and the estimator; the selector claim dropped; both base cures named; the never-the-working-tree claims narrowed; the compat lines reworded; the review compat wording pinned; the docs disclose HEAD-vs-stdin; the reinstall question answered in the changeset."
+}

@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { decodeGitHeaderPath } from '../diff-parser.js';
 import { getErrorMessage, TotemError, TotemGitError } from '../errors.js';
 import { safeExec } from './exec.js';
 import { matchesGlob } from './glob.js';
@@ -778,6 +779,105 @@ function containsNotAGitRepo(err: unknown): boolean {
 }
 
 /**
+ * The destination label of a `diff --git a/<x> b/<y>` line, decoded
+ * (mmnto-ai/totem#3048, reads 2 and 3). Git C-quotes a label carrying a
+ * non-ASCII byte (default `core.quotepath`), a double quote, a backslash or a
+ * control character, and either side may be quoted on its own: a rename from an
+ * ASCII name to a non-ASCII one quotes only the b side. A quoted b side is
+ * decoded. A bare b side is read to the end of the line: when the two sides are
+ * equal (not a rename) at the split where they match, whatever spaces or ` b/`
+ * the path holds; for a rename, from the first ` b/` when the a side holds no
+ * space (the boundary the filter used before this change, which reads a rename
+ * into a path containing ` b/` whole), else from the last ` b/`. Git writes a
+ * spaced path bare on this line with no terminator, so a RENAME whose source or
+ * destination contains ` b/` is read heuristically — the fragment is what the
+ * listing shows and what an ignore glob meets; git's own `+++` and `rename to`
+ * lines are the cure (mmnto-ai/totem#3110). Null when the line has no readable
+ * b side.
+ */
+const BARE_HEADER_PREFIX = 'diff --git a/';
+
+function diffGitDestination(line: string): string | null {
+  const quotedB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) "b\/((?:[^"\\]|\\.)*)"$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
+  if (quotedB) return decodeGitHeaderPath(`"${quotedB[1]!}"`);
+  // A bare line whose two sides are equal (a change that is not a rename, the
+  // common case) is split where the halves match, whatever spaces or ` b/` the
+  // path holds: the split git's own header parser tries first.
+  const equal = equalHalvesDestination(line);
+  if (equal !== null) return equal;
+  // A rename (the sides differ) with a bare b side after a bare a side that
+  // holds no space: the FIRST ` b/` is the boundary, as the filter read it
+  // before mmnto-ai/totem#3048, so a rename into a destination that itself
+  // contains ` b/` is read whole. A rename FROM a source containing ` b/` is
+  // read at the wrong boundary here; the header alone cannot decide it, and
+  // `diffSectionDestination` reads such a section's own metadata instead.
+  const firstBoundaryB = line.match(/^diff --git a\/\S+ b\/(.+)$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
+  if (firstBoundaryB) return firstBoundaryB[1]!;
+  // A bare b side after a spaced or quoted a side: the LAST ` b/` is the only
+  // boundary the line offers, ambiguous when the destination also holds ` b/`
+  // (mmnto-ai/totem#3110).
+  const bareB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) b\/(.+)$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
+  return bareB ? bareB[1]! : null;
+}
+
+/**
+ * The destination of a bare `diff --git a/<x> b/<y>` line whose two sides are
+ * equal (a change that is not a rename): the split where the halves match,
+ * whatever spaces or ` b/` the path holds — the split git's own header parser
+ * tries first. Null for a rename or a quoted line.
+ */
+function equalHalvesDestination(line: string): string | null {
+  if (!line.startsWith(BARE_HEADER_PREFIX)) return null;
+  const rest = line.slice(BARE_HEADER_PREFIX.length);
+  for (let at = rest.indexOf(' b/'); at !== -1; at = rest.indexOf(' b/', at + 1)) {
+    const a = rest.slice(0, at);
+    const b = rest.slice(at + 3);
+    if (a.length > 0 && a === b) return b;
+  }
+  return null;
+}
+
+/**
+ * True when a bare header offers more than one ` b/` boundary and its sides
+ * are not equal: a rename whose source or destination contains ` b/`, which
+ * the header alone cannot decide (mmnto-ai/totem#3110).
+ */
+function headerIsAmbiguous(line: string): boolean {
+  if (!line.startsWith(BARE_HEADER_PREFIX)) return false;
+  const rest = line.slice(BARE_HEADER_PREFIX.length);
+  const first = rest.indexOf(' b/');
+  if (first === -1 || rest.indexOf(' b/', first + 1) === -1) return false;
+  return equalHalvesDestination(line) === null;
+}
+
+/**
+ * The destination path of one `diff --git` section (mmnto-ai/totem#3114 round
+ * 7). An unambiguous header is read as `diffGitDestination` reads it. An
+ * ambiguous one is read from the section's own metadata, which git writes
+ * before the first hunk and terminates or quotes unambiguously: the `rename to`
+ * line of a rename or the `copy to` line of a detected copy (both precede any
+ * `Binary files` line), else the `+++ b/` line of a content change. A deletion
+ * (`+++ /dev/null`) and a section with none of these lines fall back to the
+ * header heuristics; git writes no such ambiguous section.
+ */
+function diffSectionDestination(section: string): string | null {
+  const newline = section.indexOf('\n');
+  const header = newline === -1 ? section : section.slice(0, newline);
+  if (!headerIsAmbiguous(header)) return diffGitDestination(header);
+  for (const line of section.split('\n').slice(1)) {
+    if (line.startsWith('@@') || line.startsWith('Binary files ')) break;
+    if (line.startsWith('rename to ')) return decodeGitHeaderPath(line.slice('rename to '.length));
+    if (line.startsWith('copy to ')) return decodeGitHeaderPath(line.slice('copy to '.length));
+    if (line.startsWith('+++ ')) {
+      const label = decodeGitHeaderPath(line.slice('+++ '.length));
+      if (label === '/dev/null') break;
+      return label.startsWith('b/') ? label.slice(2) : label;
+    }
+  }
+  return diffGitDestination(header);
+}
+
+/**
  * Filter a unified diff to exclude files matching ignore patterns.
  * Splits on `diff --git` boundaries and removes sections for ignored files.
  * Uses matchesGlob from core for consistent glob behavior.
@@ -788,11 +888,9 @@ export function filterDiffByPatterns(diff: string, patterns: string[]): string {
   const sections = diff.split(/^(?=diff --git )/m);
   return sections
     .filter((section) => {
-      // Extract destination path (b/) — handles renames correctly
-      const firstLine = section.substring(0, section.indexOf('\n'));
-      const quoted = firstLine.match(/^diff --git "a\/.*?" "b\/(.*?)"$/);
-      const unquoted = firstLine.match(/^diff --git a\/\S+ b\/(.+)$/);
-      const filePath = quoted?.[1] ?? unquoted?.[1];
+      // The destination path (b/), from the section's own metadata when the
+      // header is ambiguous — handles renames correctly
+      const filePath = diffSectionDestination(section);
       if (!filePath) return true;
       return !patterns.some((p) => matchesGlob(filePath, p));
     })
@@ -801,18 +899,10 @@ export function filterDiffByPatterns(diff: string, patterns: string[]): string {
 
 export function extractChangedFiles(diff: string): string[] {
   const files: string[] = [];
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git')) {
-      // Handle quoted paths (spaces): diff --git "a/my file.ts" "b/my file.ts"
-      const quoted = line.match(/^diff --git "a\/.+" "b\/(.+)"$/); // totem-ignore — single line match, not iterating
-      if (quoted) {
-        files.push(quoted[1]!);
-        continue;
-      }
-      // Standard unquoted paths: diff --git a/file.ts b/file.ts
-      const unquoted = line.match(/^diff --git a\/.+ b\/(.+)$/); // totem-ignore — single line match
-      if (unquoted) files.push(unquoted[1]!);
-    }
+  for (const section of diff.split(/^(?=diff --git )/m)) {
+    if (!section.startsWith('diff --git ')) continue;
+    const filePath = diffSectionDestination(section);
+    if (filePath !== null) files.push(filePath);
   }
   return files;
 }
