@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "3d0f1e1c8c93f9a41c8f7997244df3704dd5c7e3",
+  "readAt": "2026-10-26T19:47:19Z",
+  "findings": [
+    {
+      "id": "3122-r1-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 2161,
+      "claim": "The arm checks the git dirs, not the resolved hooks dir, so under a relative core.hooksPath (per-worktree by githooks(5)) or a hooksPath set in config.worktree it skips a write that would touch only this worktree and prints a false 'shared by every worktree' line; no test covers core.hooksPath.",
+      "counterexample": "resolveHooksDir honours core.hooksPath (lines 45-46, 62): with core.hooksPath=.githooks, git rev-parse --git-path hooks from the linked worktree prints the relative .githooks, which path.resolve turns into <linked-worktree>/.githooks. Holds: skip only when the resolved hooksDir lies outside the worktree."
+    },
+    {
+      "id": "3122-r1-F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 136,
+      "claim": "commonRepositoryIsBare and the script grep only <commonDir>/config for 'bare = true'; a bare repository whose worktree enabled extensions.worktreeConfig (git sparse-checkout does this) carries the flag in config.worktree instead, and the spellings 1/yes/on are missed, so such a user is skipped with a message naming a main worktree that does not exist.",
+      "counterexample": "Measured with git 2.56: in a bare clone's worktree, git sparse-checkout set --no-cone x moves bare = true from config into config.worktree; afterwards config has no bare line while git -C <commonDir> rev-parse --is-bare-repository still prints true. The bare tests cover only a fresh clone --bare plus worktree add. Holds: read the value from git in the CLI; the script reads both files with the boolean spellings."
+    },
+    {
+      "id": "3122-r1-F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 152,
+      "claim": "--force, the only escape from the worktree skip, also rewrites every shared hook whole (attested trailers and user-appended content included) and force-overwrites declined session hooks; the skip line and the changeset do not say so, so the flag now carries two meanings.",
+      "counterexample": "installGitHook under force 'overwrites the WHOLE file, trailer included' (about lines 1866-1870); hooksCommand passes opts.force into the session-hook summaries (lines 2388-2389). No test pairs a worktree with a user extension. Holds: the line names the main worktree first (a bare install there keeps the extensions) and states the whole-file cost of --force; a worktree-only override is routed to the issue."
+    },
+    {
+      "id": "3122-r1-F4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 247,
+      "claim": "Run from an OLDER linked worktree, the Git Hooks row reads the newer shared hooks as stale against its own checkout's canonical and prescribes totem hook install --force for owned-whole or legacy hooks, now the one path that writes from a worktree, so doctor tells the user to make exactly this regression; its bare remedies lead to the skip line, so the row stays warn in that worktree.",
+      "counterexample": "doctor.ts lines 237-335 (hooksStaleAgainstCanonical and the per-shape remedies at 247, 305, 322, 366). Declined on scope: the four-shape remedy logic is the issue's ask 3 and its own build; the changeset and the wiki now disclose that doctor's remedy from a linked worktree is unchanged and that --force from there writes this checkout's templates."
+    },
+    {
+      "id": "3122-r1-F5",
+      "severity": "MINOR",
+      "file": ".changeset/hook-install-linked-worktree.md",
+      "line": 6,
+      "claim": "'The interactive totem init path ... unchanged' understates the paths without the arm: installEnforcementHooks takes a non-interactive branch when stdin is not a TTY (called from init.ts), the hidden legacy verb totem install-hooks writes too, and upgradePrePushHookIfNeeded only upgrades legacy hooks so cannot revert a newer one.",
+      "counterexample": "install-hooks.ts about line 1994 ('Non-interactive mode - installing git enforcement hooks.'), init.ts 2301 and 2366, index.ts 2537-2542. Holds: the scope names totem init in both modes and the hidden verb."
+    },
+    {
+      "id": "3122-r1-F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 133,
+      "claim": "The doc comment says the resolver's one git call stays the only one, but isLinkedWorktree and commonRepositoryIsBare each call resolveGitDirs, so the arm spawns rev-parse twice for a bare repository's worktree; the spec's 'one exported pure predicate' is two.",
+      "counterexample": "Lines 136-142 and the arm at 2161. Holds: the arm resolves the dirs once and passes them to both checks."
+    },
+    {
+      "id": "3122-r1-F7",
+      "severity": "MINOR",
+      "file": ".totem/specs/3122.md",
+      "line": 1,
+      "claim": "The spec's failure-mode row 'git unavailable' describes a recovery the CLI cannot reach: resolveGitRootForHookPath runs core's resolveGitRoot, which throws through throwIfGitMissing before the arm, so the offline fallback is reachable only by a direct call to the exported predicates or a git failure after the root resolved.",
+      "counterexample": "packages/core/src/sys/git.ts:750. The CLI fallback and the script's pointer walk agree on all four shapes (directory, pointer with commondir, pointer without, unparseable). Holds: narration corrected."
+    },
+    {
+      "id": "3122-r1-F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks-exit-contract.test.ts",
+      "line": 573,
+      "claim": "The claim that the per-checkout session hooks are still regenerated after the skip holds structurally (the new null takes the hook-manager null's path; nothing after it writes to hooksDir) but no test pins it from a worktree.",
+      "counterexample": "install-hooks.ts: if (result) gates only the summary (2319), the session-hook summaries run unconditionally (2388-2389). Holds: a row plants a managed session hook in the worktree and asserts it is regenerated after the skipped install."
+    },
+    {
+      "id": "3122-r1-F9",
+      "severity": "QUESTION",
+      "file": "packages/pack-agent-security/test/repo-sweep.test.ts",
+      "line": 253,
+      "claim": "Does the sweep pass at the head with the allowlist count at 2 for install-hooks.ts? The leg counted exactly two spawnSync call sites (lines 55 and 89) and could not run the sweep without the head checked out.",
+      "counterexample": "Answered: the full workspace test at 3d0f1e1c passed the sweep (pack-agent-security 5 files, 59 tests); the count moves with the bare read from git in the fold and the reason text names each call."
+    }
+  ],
+  "folded": [
+    "3122-r1-F1",
+    "3122-r1-F2",
+    "3122-r1-F3",
+    "3122-r1-F5",
+    "3122-r1-F6",
+    "3122-r1-F7",
+    "3122-r1-F8",
+    "3122-r1-F9"
+  ],
+  "verdict": "Read 1 of the mmnto-ai/totem#3122 build at 3d0f1e1c against 90d41c20: blocking=0 material=4 minor=4 question=1 folded=8 (counts as typed). Git semantics measured with git 2.56 in throwaway repositories (main, linked, bare, submodule, separate-git-dir) all agree with the predicates; the mmnto-ai/totem#2418 guarantees and the three re-encoded exit-contract rows drop nothing. Folded in the commit after the read: the arm keys on the resolved hooks dir lying outside the worktree (F1, a relative core.hooksPath is per-worktree); the bare read comes from git in the CLI and from both config files in the script (F2); the skip line and the changeset state --force's whole-file cost (F3); the scope names totem init in both modes and the hidden install-hooks verb (F5); the arm resolves the git dirs once (F6); the spec's offline row says what the CLI can reach (F7); a row pins the session-hook regeneration from a worktree (F8); the sweep passes at the head (F9, answered). F4 (doctor's remedy from an older linked worktree now prescribes --force, the regression) is DECLINED on scope: disclosed in the changeset and the wiki, routed to mmnto-ai/totem#3122 ask 3, since the doctor row's four-shape remedy logic is its own build. Leg duration 211 seconds by its own clock."
+}

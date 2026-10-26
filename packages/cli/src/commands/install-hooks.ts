@@ -113,16 +113,48 @@ function resolveGitDirs(gitRoot: string): { gitDir: string; commonDir: string } 
   return { gitDir, commonDir: path.resolve(gitDir, commonDir) };
 }
 
+type GitDirs = { gitDir: string; commonDir: string };
+
+function isLinkedFromDirs(dirs: GitDirs): boolean {
+  return dirs.gitDir !== dirs.commonDir;
+}
+
 /**
  * Whether `gitRoot` is a LINKED worktree: a checkout whose git dir differs from
  * the repository's common dir, so the hooks dir {@link resolveHooksDir} returns
- * is the one EVERY worktree runs (mmnto-ai/totem#3122). A submodule has a
- * pointer file but equal dirs and no `commondir`, so it reads false, as does a
- * plain checkout.
+ * is, unless `core.hooksPath` aims inside the worktree, the one EVERY worktree
+ * runs (mmnto-ai/totem#3122). A submodule has a pointer file but equal dirs and
+ * no `commondir`, so it reads false, as does a plain checkout.
  */
 export function isLinkedWorktree(gitRoot: string): boolean {
   const dirs = resolveGitDirs(gitRoot);
-  return dirs !== null && dirs.gitDir !== dirs.commonDir;
+  return dirs !== null && isLinkedFromDirs(dirs);
+}
+
+/** A `core.bare` line in a git config file, in every boolean spelling git accepts. */
+const BARE_CONFIG_LINE = /^\s*bare\s*(?:=\s*(?:true|yes|on|1))?\s*$/im;
+
+function isBareFromDirs(dirs: GitDirs): boolean {
+  // git's own answer, asked IN the common dir: it reads core.bare wherever git
+  // keeps it — `config`, or the main worktree's `config.worktree` once
+  // extensions.worktreeConfig is on (`git sparse-checkout` turns it on and moves
+  // the flag there), where a read of `config` alone comes up empty.
+  const asked = spawnSync('git', ['rev-parse', '--is-bare-repository'], {
+    cwd: dirs.commonDir,
+    encoding: 'utf-8',
+  });
+  if (asked.status === 0 && asked.stdout) return asked.stdout.trim() === 'true';
+  // When that read fails: both files, every spelling.
+  return ['config', 'config.worktree'].some((name) => {
+    const file = path.join(dirs.commonDir, name);
+    return fs.existsSync(file) && BARE_CONFIG_LINE.test(fs.readFileSync(file, 'utf-8'));
+  });
+}
+
+/** Whether `child` lies inside `parent`; the same directory counts as inside. */
+function isInsideDir(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
 /**
@@ -130,15 +162,12 @@ export function isLinkedWorktree(gitRoot: string): boolean {
  * working tree, the layout of a developer who keeps one worktree per branch.
  * Every checkout of such a repository is a linked worktree, and nothing else
  * exists to own the shared hooks, so a linked worktree of a bare repository
- * writes them (mmnto-ai/totem#3122). Read from the common dir's own config
- * (`core.bare`), a file read, so the resolver's one git call stays the only one.
+ * writes them (mmnto-ai/totem#3122). Read from git in the common dir, with the
+ * two config files as the fallback.
  */
 export function commonRepositoryIsBare(gitRoot: string): boolean {
   const dirs = resolveGitDirs(gitRoot);
-  if (!dirs) return false;
-  const configPath = path.join(dirs.commonDir, 'config');
-  if (!fs.existsSync(configPath)) return false;
-  return /^\s*bare\s*=\s*true\s*$/im.test(fs.readFileSync(configPath, 'utf-8'));
+  return dirs !== null && isBareFromDirs(dirs);
 }
 
 /** Skip line shared by every caller that hits an unresolvable hooks directory. */
@@ -150,7 +179,7 @@ const HOOKS_DIR_UNRESOLVED_MSG =
  * write; `--force` is the one way to write them from a worktree (mmnto-ai/totem#3122).
  */
 const HOOKS_SHARED_WORKTREE_MSG =
-  '[Totem] This checkout is a linked worktree: git hooks are shared by every worktree of the repository and the main worktree owns them — skipping the write (run `totem hook install` from the main worktree, or `--force` here to write them from this branch).';
+  '[Totem] This checkout is a linked worktree: git hooks are shared by every worktree of the repository and the main worktree owns them — skipping the write. Run `totem hook install` from the main worktree (a bare install there keeps attested extensions), or `--force` here to write them from this branch, which rewrites each shared hook whole, trailers included.';
 
 /**
  * Whether `err` (typically the TotemGitError thrown by `resolveGitRoot`) stems
@@ -2155,10 +2184,13 @@ export async function installHooksNonInteractive(
   // A linked worktree resolves the SHARED hooks dir: writing it from here installs
   // this branch's templates for every worktree of the repository and silently
   // reverts a newer main worktree's hooks (mmnto-ai/totem#3122). The main worktree
-  // owns them; `--force` is the one way to write from a worktree. A BARE
-  // repository has no main worktree to own them, so its worktrees write. The
+  // owns them; `--force` is the one way to write from a worktree. Two shapes write
+  // anyway: a hooks dir that lies inside THIS worktree (a relative or per-worktree
+  // `core.hooksPath`), which no other worktree runs, and a BARE repository, which
+  // has no main worktree to own them. The dirs resolve once for both checks. The
   // session hooks the caller regenerates after this are per-checkout and unaffected.
-  if (!force && isLinkedWorktree(gitRoot) && !commonRepositoryIsBare(gitRoot)) {
+  const dirs = force ? null : resolveGitDirs(gitRoot);
+  if (dirs && isLinkedFromDirs(dirs) && !isInsideDir(hooksDir, gitRoot) && !isBareFromDirs(dirs)) {
     console.error(HOOKS_SHARED_WORKTREE_MSG);
     return null;
   }

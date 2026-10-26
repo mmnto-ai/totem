@@ -58,13 +58,18 @@ function resolveHooksDir() {
     const commonDir = readFileSync(commonDirFile, 'utf-8').trim();
     const commonDirPath = isAbsolute(commonDir) ? commonDir : resolve(gitDir, commonDir);
     // A BARE common repository (one worktree per branch, no main working tree)
-    // has nothing else to own the shared hooks, so its worktrees write them.
-    const bare = existsSync(join(commonDirPath, 'config'))
-      ? /^\s*bare\s*=\s*true\s*$/im.test(readFileSync(join(commonDirPath, 'config'), 'utf-8'))
-      : false;
+    // has nothing else to own the shared hooks, so its worktrees write them. The
+    // flag lives in `config`, or in `config.worktree` once extensions.worktreeConfig
+    // is on (git sparse-checkout turns it on and moves the flag there), in any
+    // boolean spelling git accepts.
+    const bareLine = /^\s*bare\s*(?:=\s*(?:true|yes|on|1))?\s*$/im;
+    const bare = ['config', 'config.worktree'].some((name) => {
+      const file = join(commonDirPath, name);
+      return existsSync(file) && bareLine.test(readFileSync(file, 'utf-8'));
+    });
     if (!bare && process.env.TOTEM_HOOKS_FORCE !== '1') {
       console.log(
-        '[totem] Linked worktree: git hooks are shared by every worktree of this repository and the main worktree owns them — skipping hook installation (run `pnpm install` from the main worktree, or set TOTEM_HOOKS_FORCE=1 to write them from this branch).',
+        '[totem] Linked worktree: git hooks are shared by every worktree of this repository and the main worktree owns them — skipping hook installation (run `pnpm install` from the main worktree, or set TOTEM_HOOKS_FORCE=1 to copy them from this branch, each shared hook replaced whole).',
       );
       process.exit(0);
     }

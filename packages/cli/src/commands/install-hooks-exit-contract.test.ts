@@ -613,6 +613,20 @@ describe('hooksCommand in a linked worktree (mmnto-ai/totem#2418)', () => {
     expect(result!.postMerge).toBe('installed');
     expect(result!.postCheckout).toBe('installed');
   });
+
+  it('the per-checkout session hooks are still regenerated after the skipped install', async () => {
+    // The skip returns null the way the hook-manager branch does, and hooksCommand must
+    // not early-return on it: the managed session hooks live in THIS checkout.
+    const sessionHook = path.join(wtDir, '.claude', 'hooks', 'SessionStart.cjs');
+    fs.mkdirSync(path.dirname(sessionHook), { recursive: true });
+    fs.writeFileSync(sessionHook, `${TOTEM_FILE_MARKER}\nstale body\n${TOTEM_FILE_END}\n`, 'utf-8');
+
+    await expect(hooksCommand({})).resolves.toBeUndefined();
+
+    expect(errorOutput()).toContain('linked worktree');
+    expect(fs.readFileSync(sessionHook, 'utf-8')).toBe(CLAUDE_SESSION_START);
+    expect(fs.existsSync(path.join(sharedHooksDir(), 'pre-push'))).toBe(false);
+  });
 });
 
 describe('hooksCommand with an unparseable .git pointer file (declared skip)', () => {

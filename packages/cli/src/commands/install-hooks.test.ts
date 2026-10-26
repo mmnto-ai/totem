@@ -1761,6 +1761,56 @@ describe('installHooksNonInteractive', () => {
     );
   });
 
+  it('a linked worktree with a relative core.hooksPath writes: that hooks dir is per-worktree, not shared', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    // githooks(5): a relative core.hooksPath is taken from the worktree where the hook
+    // runs, so every worktree has its own directory and nothing is shared to protect.
+    execFileSync('git', ['-C', main, 'config', 'core.hooksPath', '.githooks'], {
+      stdio: 'ignore',
+    });
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((message: unknown) => {
+      lines.push(String(message));
+    });
+    try {
+      const result = await installHooksNonInteractive(linked);
+      expect(result).not.toBeNull();
+      expect(result!.prePush).toBe('installed');
+      expect(fs.existsSync(path.join(linked, '.githooks', 'pre-push'))).toBe(true);
+      expect(fs.existsSync(path.join(main, '.githooks', 'pre-push'))).toBe(false);
+      expect(lines.some((line) => line.includes('linked worktree'))).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a bare repository whose flag moved to config.worktree (extensions.worktreeConfig) still reads bare and writes', async () => {
+    const { main } = initRepoWithWorktree(tmpDir);
+    const bare = path.join(tmpDir, 'repo.git');
+    execFileSync('git', ['clone', '-q', '--bare', main, bare], { stdio: 'ignore' });
+    const checkout = path.join(tmpDir, 'bare-wt');
+    execFileSync('git', ['-C', bare, 'worktree', 'add', '-q', checkout, 'HEAD'], {
+      stdio: 'ignore',
+    });
+    // What `git sparse-checkout` does on a bare repository's worktree: the extension on,
+    // and core.bare moved out of `config` into the main worktree's `config.worktree`.
+    for (const args of [
+      ['config', 'core.repositoryformatversion', '1'],
+      ['config', 'extensions.worktreeConfig', 'true'],
+      ['config', '--worktree', 'core.bare', 'true'],
+      ['config', '--unset', 'core.bare'],
+    ]) {
+      execFileSync('git', ['-C', bare, ...args], { stdio: 'ignore' });
+    }
+    expect(/^\s*bare\s*=/m.test(fs.readFileSync(path.join(bare, 'config'), 'utf-8'))).toBe(false);
+
+    expect(commonRepositoryIsBare(checkout)).toBe(true);
+    const result = await installHooksNonInteractive(checkout);
+
+    expect(result).not.toBeNull();
+    expect(fs.existsSync(path.join(bare, 'hooks', 'pre-push'))).toBe(true);
+  });
+
   // ── The installed tier survives a bare rewrite (mmnto-ai/totem#2753 fold F4) ──
   //
   // A bare install exists to keep a hook CURRENT. Re-rendering a `--strict` hook at

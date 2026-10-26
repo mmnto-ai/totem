@@ -118,4 +118,26 @@ describe('tools/install-hooks.js from a linked worktree (mmnto-ai/totem#3122)', 
       expect(fs.readFileSync(path.join(bare, 'hooks', hook), 'utf-8')).toContain(`bare ${hook}`);
     }
   });
+
+  it('a bare repository whose flag lives in config.worktree, spelled yes, still writes', () => {
+    const bare = path.join(tmpDir, 'repo.git');
+    git(['clone', '-q', '--bare', main, bare], tmpDir);
+    const checkout = path.join(tmpDir, 'bare-wt');
+    git(['-C', bare, 'worktree', 'add', '-q', checkout, 'HEAD'], tmpDir);
+    // What `git sparse-checkout` does on a bare repository's worktree, with one of the
+    // other boolean spellings git accepts.
+    git(['-C', bare, 'config', 'core.repositoryformatversion', '1'], tmpDir);
+    git(['-C', bare, 'config', 'extensions.worktreeConfig', 'true'], tmpDir);
+    git(['-C', bare, 'config', '--worktree', 'core.bare', 'yes'], tmpDir);
+    git(['-C', bare, 'config', '--unset', 'core.bare'], tmpDir);
+    plantScript(checkout, 'bare');
+
+    const run = runScript(checkout);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).not.toContain('Linked worktree');
+    for (const hook of HOOKS) {
+      expect(fs.readFileSync(path.join(bare, 'hooks', hook), 'utf-8')).toContain(`bare ${hook}`);
+    }
+  });
 });
