@@ -362,6 +362,38 @@ describe('filterDiffByPatterns', () => {
     expect(filterDiffByPatterns(rename, ['other/**'])).toBe(rename);
   });
 
+  it('splits a bare header whose two sides are equal where they match, so a path containing " b/" that is not renamed is filtered by its whole name (mmnto-ai/totem#3114 round 7)', () => {
+    // Neither header heuristic decides this line: the first ` b/` lies inside
+    // the source, the last one inside the destination. Equal halves do.
+    const edit = [
+      'diff --git a/src/a b/x.ts b/src/a b/x.ts',
+      'index 1234567..abcdef0 100644',
+      '--- a/src/a b/x.ts\t',
+      '+++ b/src/a b/x.ts\t',
+      '@@ -1 +1 @@',
+      '-x',
+      '+y',
+    ].join('\n');
+    expect(filterDiffByPatterns(edit, ['src/a b/**'])).toBe('');
+    expect(filterDiffByPatterns(edit, ['other/**'])).toBe(edit);
+  });
+
+  it('reads an ambiguous rename header from the section\'s own "rename to" or "+++" line, so a rename FROM a path containing " b/" is filtered by its real destination (mmnto-ai/totem#3114 round 7)', () => {
+    const renameFrom = [
+      'diff --git a/src/a b/old.ts b/src/new.ts',
+      'similarity index 90%',
+      'rename from src/a b/old.ts',
+      'rename to src/new.ts',
+      '--- a/src/a b/old.ts\t',
+      '+++ b/src/new.ts',
+      '@@ -1 +1 @@',
+      '-x',
+      '+y',
+    ].join('\n');
+    expect(filterDiffByPatterns(renameFrom, ['src/new.ts'])).toBe('');
+    expect(filterDiffByPatterns(renameFrom, ['src/a b/**'])).toBe(renameFrom);
+  });
+
   it('removes sections matching ignore patterns', () => {
     const combined = DIFF_WITH_STRATEGY + '\n' + DIFF_WITH_CODE;
     const result = filterDiffByPatterns(combined, ['.strategy']);
@@ -521,6 +553,25 @@ describe('extractChangedFiles', () => {
     expect(extractChangedFiles(renameInto)).toEqual(['src/a b/config.ts']);
     const spacedBoth = 'diff --git a/my dir/x.ts b/my dir/x.ts\n+++ b/my dir/x.ts\t';
     expect(extractChangedFiles(spacedBoth)).toEqual(['my dir/x.ts']);
+  });
+
+  it('splits a bare header whose two sides are equal where they match, however many " b/" the path holds (mmnto-ai/totem#3114 round 7); a rename with " b/" on either side stays heuristic (mmnto-ai/totem#3110)', () => {
+    const edit = 'diff --git a/src/a b/x.ts b/src/a b/x.ts\n+++ b/src/a b/x.ts\t';
+    expect(extractChangedFiles(edit)).toEqual(['src/a b/x.ts']);
+    const deepEdit = 'diff --git a/x b/y b/z.ts b/x b/y b/z.ts\n+++ b/x b/y b/z.ts\t';
+    expect(extractChangedFiles(deepEdit)).toEqual(['x b/y b/z.ts']);
+  });
+
+  it('reads an ambiguous rename header from the section (mmnto-ai/totem#3114 round 7): "rename to" for a pure rename, "+++" tab-terminated for a content change, and a quoted destination directly', () => {
+    const pureRename =
+      'diff --git a/src/a b/old.ts b/src/new.ts\nsimilarity index 100%\nrename from src/a b/old.ts\nrename to src/new.ts';
+    expect(extractChangedFiles(pureRename)).toEqual(['src/new.ts']);
+    const withContent =
+      'diff --git a/src/a b/old.ts b/src/new b/cfg.ts\nindex 1..2 100644\n--- a/src/a b/old.ts\t\n+++ b/src/new b/cfg.ts\t\n@@ -1 +1 @@\n-x\n+y';
+    expect(extractChangedFiles(withContent)).toEqual(['src/new b/cfg.ts']);
+    const quotedDestination =
+      'diff --git a/src/a b/old.ts "b/src/caf\\303\\251 b/x.ts"\nrename from src/a b/old.ts\nrename to "src/caf\\303\\251 b/x.ts"';
+    expect(extractChangedFiles(quotedDestination)).toEqual(['src/café b/x.ts']);
   });
 
   it('returns empty array for empty diff', () => {
