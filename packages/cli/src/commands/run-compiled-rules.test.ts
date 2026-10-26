@@ -1200,11 +1200,14 @@ describe('runCompiledRules', () => {
         }
       });
 
-      it('scrubs git location variables from every blob read, so a hook-exported GIT_DIR cannot repoint them', async () => {
-        // Git exports GIT_DIR (and under some invocations GIT_WORK_TREE) into a
-        // hook's environment; a child git that inherits them resolves against
-        // that location instead of the cwd it was given. The reader scrubs them
-        // as the repository's other repository-bound reads do (round 2).
+      it('passes git location variables through to every blob read, so the reader answers for the repository the diff came from', async () => {
+        // Git exports GIT_DIR (and under some invocations GIT_WORK_TREE and
+        // GIT_INDEX_FILE) into a hook's environment. The diff that chose the
+        // files was produced under those variables, so the reader inherits them:
+        // a checkout selected through GIT_DIR + GIT_WORK_TREE with no .git of its
+        // own is found only through them, and a partial commit's temporary index
+        // is named only by GIT_INDEX_FILE. A scrubbing reader (rounds 2 and 3)
+        // failed both; round 4 reverted it. Both blob sources are exercised.
         writeRules(tmpDir, [fooRule()]);
         fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
         fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), BAR);
@@ -1218,6 +1221,7 @@ describe('runCompiledRules', () => {
               if (!args) return '';
               if (args[0] === 'ls-tree' && args[1] === 'HEAD')
                 return '100644 blob hash\tsrc/app.ts\n';
+              if (args[0] === 'ls-files' && args[1] === '-s') return '100644 hash 0\tsrc/app.ts\n';
               if (args[0] === 'show') return FOO;
               return '';
             },
@@ -1227,61 +1231,17 @@ describe('runCompiledRules', () => {
           GIT_WORK_TREE: process.env['GIT_WORK_TREE'],
           GIT_INDEX_FILE: process.env['GIT_INDEX_FILE'],
         };
-        process.env['GIT_DIR'] = '.git';
+        const externalGitDir = path.join(tmpDir, 'elsewhere.git');
+        process.env['GIT_DIR'] = externalGitDir;
         process.env['GIT_WORK_TREE'] = tmpDir;
         process.env['GIT_INDEX_FILE'] = '.git/next-index-1';
         try {
           expect(await violationCount({ readFromHead: true })).toBe(1);
-          expect(envs.length).toBeGreaterThan(0);
-          for (const env of envs) {
-            expect(env?.['GIT_DIR']).toBeUndefined();
-            expect(env?.['GIT_WORK_TREE']).toBeUndefined();
-            // HEAD reads never consult an index, so the hook's temporary one goes too.
-            expect(env?.['GIT_INDEX_FILE']).toBeUndefined();
-            expect(env?.['LC_ALL']).toBe('C');
-          }
-        } finally {
-          for (const [key, value] of Object.entries(prior)) {
-            if (value === undefined) delete process.env[key];
-            else process.env[key] = value;
-          }
-          mockResolveGitRoot.mockRestore();
-          mockExec.mockRestore();
-        }
-      });
-
-      it('the staged reader keeps GIT_INDEX_FILE, the temporary index a partial commit names, while scrubbing the rest', async () => {
-        // `git commit <path>` runs its pre-commit hook against a temporary index
-        // that holds the files being committed and names it in GIT_INDEX_FILE;
-        // a staged read that dropped the name would read the real index, which
-        // may hold different content for the same path (round 3).
-        writeRules(tmpDir, [fooRule()]);
-        fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
-        fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), BAR);
-        const envs: Array<NodeJS.ProcessEnv | undefined> = [];
-        const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
-        const mockExec = vi
-          .spyOn(totem, 'safeExec')
-          .mockImplementation(
-            (_cmd: string, args?: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
-              envs.push(opts?.env);
-              if (!args) return '';
-              if (args[0] === 'ls-files' && args[1] === '-s') return '100644 hash 0\tsrc/app.ts\n';
-              if (args[0] === 'show') return FOO;
-              return '';
-            },
-          );
-        const prior = {
-          GIT_DIR: process.env['GIT_DIR'],
-          GIT_INDEX_FILE: process.env['GIT_INDEX_FILE'],
-        };
-        process.env['GIT_DIR'] = '.git';
-        process.env['GIT_INDEX_FILE'] = '.git/next-index-1';
-        try {
           expect(await violationCount({ isStaged: true })).toBe(1);
           expect(envs.length).toBeGreaterThan(0);
           for (const env of envs) {
-            expect(env?.['GIT_DIR']).toBeUndefined();
+            expect(env?.['GIT_DIR']).toBe(externalGitDir);
+            expect(env?.['GIT_WORK_TREE']).toBe(tmpDir);
             expect(env?.['GIT_INDEX_FILE']).toBe('.git/next-index-1');
             expect(env?.['LC_ALL']).toBe('C');
           }

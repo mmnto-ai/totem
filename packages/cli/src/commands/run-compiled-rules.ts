@@ -373,7 +373,6 @@ export async function runCompiledRules(
     sanitizeForTerminal,
     saveRuleMetrics,
     TotemError,
-    envWithoutGitLocation,
   } = await import('@mmnto/totem');
   type RuleEngineContext = import('@mmnto/totem').RuleEngineContext;
 
@@ -554,10 +553,14 @@ export async function runCompiledRules(
   // are then the commits being pushed, so an unsaved edit can neither hide a
   // pushed violation nor block a clean push. `isStaged` wins when a caller sets
   // both. Outside both, the strategy stays undefined and the worktree is read.
-  // Both git reads run with the repository-location variables scrubbed
-  // (envWithoutGitLocation): git exports GIT_DIR into the hook processes it
-  // spawns, and a child that inherits them answers for whatever repository they
-  // name rather than the cwd it was given (mmnto-ai/totem#3114 round 2).
+  // Both git reads inherit the process environment (plus LC_ALL=C). The
+  // reader's subject is the repository the diff came from, and the diff was
+  // produced by a git that inherited these same variables: a hook's GIT_DIR
+  // names this repository, a partial commit's GIT_INDEX_FILE names the index
+  // being committed, and a checkout selected through GIT_DIR + GIT_WORK_TREE
+  // has no .git of its own for a scrubbed child to find. Scrubbing them
+  // (mmnto-ai/totem#3114 round 2) broke the last two; the core helper that
+  // scrubs is for reads that must describe the cwd, which this is not (round 4).
   const blobSource = isStaged
     ? {
         ref: '',
@@ -578,17 +581,7 @@ export async function runCompiledRules(
   let blobReadStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
   if (blobSource !== undefined && repoRoot) {
     const { ref, probe, code, noun, cure } = blobSource;
-    // The staged reader keeps GIT_INDEX_FILE: a partial commit (`git commit
-    // <path>`) runs its pre-commit hook against a TEMPORARY index that holds the
-    // files being committed, and names it through that variable; the index is
-    // this reader's subject, so dropping the name would read the wrong one
-    // (mmnto-ai/totem#3114 round 3). The HEAD reader never consults an index.
-    const indexFile = process.env['GIT_INDEX_FILE'];
-    const childEnv: NodeJS.ProcessEnv = {
-      ...envWithoutGitLocation(process.env),
-      ...(isStaged && indexFile !== undefined ? { GIT_INDEX_FILE: indexFile } : {}),
-      LC_ALL: 'C',
-    };
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, LC_ALL: 'C' };
     blobReadStrategy = async (filePath: string) => {
       try {
         // 1. Skip what `git show` cannot render as a file: a symlink (mode
