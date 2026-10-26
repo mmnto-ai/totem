@@ -791,9 +791,9 @@ function containsNotAGitRepo(err: unknown): boolean {
  * readable b side.
  */
 function diffGitDestination(line: string): string | null {
-  const quotedB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) "b\/((?:[^"\\]|\\.)*)"$/); // totem-ignore — single line match, not iterating
+  const quotedB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) "b\/((?:[^"\\]|\\.)*)"$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
   if (quotedB) return decodeGitHeaderPath(`"${quotedB[1]!}"`);
-  const bareB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) b\/(.+)$/); // totem-ignore — single line match, not iterating
+  const bareB = line.match(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+) b\/(.+)$/); // totem-context: one match on a single diff header line, not an iteration over text fragments
   return bareB ? bareB[1]! : null;
 }
 
