@@ -33,7 +33,7 @@
       "file": "packages/cli/src/commands/doctor.ts",
       "line": 247,
       "claim": "Run from an OLDER linked worktree, the Git Hooks row reads the newer shared hooks as stale against its own checkout's canonical and prescribes totem hook install --force for owned-whole or legacy hooks, now the one path that writes from a worktree, so doctor tells the user to make exactly this regression; its bare remedies lead to the skip line, so the row stays warn in that worktree.",
-      "counterexample": "doctor.ts lines 237-335 (hooksStaleAgainstCanonical and the per-shape remedies at 247, 305, 322, 366). Declined on scope: the four-shape remedy logic is the issue's ask 3 and its own build; the changeset and the wiki now disclose that doctor's remedy from a linked worktree is unchanged and that --force from there writes this checkout's templates."
+      "counterexample": "doctor.ts lines 237-335 (hooksStaleAgainstCanonical and the per-shape remedies at 247, 305, 322, 366). Declined on scope at the read, then folded on the maintainer's word: the row reads sharedHooksOwnedByMainWorktree, appends 'run it from the main worktree' with the --force warning to every non-pass remedy, and says the comparison was against this checkout's templates; from the main worktree the row is unchanged."
     },
     {
       "id": "3122-r1-F5",
@@ -80,11 +80,12 @@
     "3122-r1-F1",
     "3122-r1-F2",
     "3122-r1-F3",
+    "3122-r1-F4",
     "3122-r1-F5",
     "3122-r1-F6",
     "3122-r1-F7",
     "3122-r1-F8",
     "3122-r1-F9"
   ],
-  "verdict": "Read 1 of the mmnto-ai/totem#3122 build at 3d0f1e1c against 90d41c20: blocking=0 material=4 minor=4 question=1 folded=8 (counts as typed). Git semantics measured with git 2.56 in throwaway repositories (main, linked, bare, submodule, separate-git-dir) all agree with the predicates; the mmnto-ai/totem#2418 guarantees and the three re-encoded exit-contract rows drop nothing. Folded in the commit after the read: the arm keys on the resolved hooks dir lying outside the worktree (F1, a relative core.hooksPath is per-worktree); the bare read comes from git in the CLI and from both config files in the script (F2); the skip line and the changeset state --force's whole-file cost (F3); the scope names totem init in both modes and the hidden install-hooks verb (F5); the arm resolves the git dirs once (F6); the spec's offline row says what the CLI can reach (F7); a row pins the session-hook regeneration from a worktree (F8); the sweep passes at the head (F9, answered). F4 (doctor's remedy from an older linked worktree now prescribes --force, the regression) is DECLINED on scope: disclosed in the changeset and the wiki, routed to mmnto-ai/totem#3122 ask 3, since the doctor row's four-shape remedy logic is its own build. Leg duration 211 seconds by its own clock."
+  "verdict": "Read 1 of the mmnto-ai/totem#3122 build at 3d0f1e1c against 90d41c20: blocking=0 material=4 minor=4 question=1 folded=9 (counts as typed). Git semantics measured with git 2.56 in throwaway repositories (main, linked, bare, submodule, separate-git-dir) all agree with the predicates; the mmnto-ai/totem#2418 guarantees and the three re-encoded exit-contract rows drop nothing. Folded in the commit after the read: the arm keys on the resolved hooks dir lying outside the worktree (F1, a relative core.hooksPath is per-worktree); the bare read comes from git in the CLI and from both config files in the script (F2); the skip line and the changeset state --force's whole-file cost (F3); the scope names totem init in both modes and the hidden install-hooks verb (F5); the arm resolves the git dirs once (F6); the spec's offline row says what the CLI can reach (F7); a row pins the session-hook regeneration from a worktree (F8); the sweep passes at the head (F9, answered). F4 (doctor's remedy from an older linked worktree prescribed --force, the regression) was declined on scope at the read and FOLDED after it on the maintainer's word: the doctor row reads the same predicate as the installer, says it judged against this checkout's templates, and sends every non-pass remedy to the main worktree; one doctor test row measured failing before the fold. Leg duration 211 seconds by its own clock."
 }

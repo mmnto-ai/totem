@@ -208,6 +208,29 @@ export async function checkGitHooks(
   } catch {
     hooksDir = path.join(gitRoot, '.git', 'hooks');
   }
+  // Since mmnto-ai/totem#3122 the shared hooks are the main worktree's to write. From
+  // a linked worktree of a non-bare repository this row judges hooks every worktree
+  // runs against THIS checkout's templates, and its remedies run from here would skip
+  // (a bare install) or write this checkout's templates for every worktree
+  // (`--force`), so the row says what it compared against and sends the remedy to
+  // the main worktree. A hooks dir inside this worktree (a relative core.hooksPath)
+  // is its own and reads as before.
+  // An installer module that fails to load is reported by the sensor below as
+  // 'unavailable' (mmnto-ai/totem#2701), so this read maps that one rejection to
+  // "not a linked worktree" instead of pre-empting the sensor's report with its own
+  // throw; the predicate itself never throws.
+  const installer = await import('./install-hooks.js').then(
+    (module) => module,
+    () => null,
+  );
+  const ownedByMainWorktree =
+    installer !== null && installer.sharedHooksOwnedByMainWorktree(gitRoot, hooksDir);
+  const fromMainWorktree = ownedByMainWorktree
+    ? " — run it from the main worktree: this is a linked worktree, the hooks are shared by every worktree of the repository, and from here a bare install skips them while `--force` writes THIS checkout's templates for all of them (mmnto-ai/totem#3122)"
+    : '';
+  const judgedHere = ownedByMainWorktree
+    ? " (judged against this checkout's templates; the main worktree's may be newer)"
+    : '';
   const markers: { file: string; marker: string }[] = [
     { file: 'pre-commit', marker: '[totem] pre-commit hook' },
     { file: 'pre-push', marker: '[totem] pre-push hook' },
@@ -243,8 +266,7 @@ export async function checkGitHooks(
         name: 'Git Hooks',
         status: 'warn',
         message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${sensed.totemDir}': ${sensed.failure}`,
-        remediation:
-          'totem hook install --force (re-renders the four hooks from the current config)',
+        remediation: `totem hook install --force (re-renders the four hooks from the current config)${fromMainWorktree}`,
       };
     }
     const stale = sensed.stale;
@@ -328,7 +350,8 @@ export async function checkGitHooks(
         clauses.join('; ') +
         (appended.length > 0
           ? ' — `--force` rewrites the whole file and would overwrite your own hook content'
-          : '');
+          : '') +
+        fromMainWorktree;
       // The headline names the cause. A `non-utf8` row's block may be byte-identical
       // to the canonical (the bad byte on its shebang line), so "does not match …
       // the managed block is stale" would be two false statements about it (final
@@ -348,7 +371,7 @@ export async function checkGitHooks(
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message,
+        message: message + judgedHere,
         remediation,
       };
     }
@@ -363,7 +386,7 @@ export async function checkGitHooks(
     name: 'Git Hooks',
     status: 'warn',
     message: `${installed}/${markers.length} hooks installed (missing: ${missing.join(', ')})`,
-    remediation: 'totem hooks',
+    remediation: `totem hooks${fromMainWorktree}`,
   };
 }
 

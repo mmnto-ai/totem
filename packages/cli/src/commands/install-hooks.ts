@@ -158,6 +158,24 @@ function isInsideDir(child: string, parent: string): boolean {
 }
 
 /**
+ * Whether the hooks dir `hooksDir` resolved for `gitRoot` is the main worktree's to
+ * write: `gitRoot` is a linked worktree of a non-bare repository and the dir lies
+ * outside it, so every worktree runs it (mmnto-ai/totem#3122). The one truth the
+ * installer's skip and the doctor row's remedy both read; the dirs resolve once.
+ * A hooks dir inside the worktree (a relative or per-worktree `core.hooksPath`) is
+ * the worktree's own, and a bare repository has no main worktree to own anything.
+ */
+export function sharedHooksOwnedByMainWorktree(gitRoot: string, hooksDir: string): boolean {
+  const dirs = resolveGitDirs(gitRoot);
+  return (
+    dirs !== null &&
+    isLinkedFromDirs(dirs) &&
+    !isInsideDir(hooksDir, gitRoot) &&
+    !isBareFromDirs(dirs)
+  );
+}
+
+/**
  * Whether the repository `gitRoot` belongs to is BARE: a `.git` with no main
  * working tree, the layout of a developer who keeps one worktree per branch.
  * Every checkout of such a repository is a linked worktree, and nothing else
@@ -2189,8 +2207,7 @@ export async function installHooksNonInteractive(
   // `core.hooksPath`), which no other worktree runs, and a BARE repository, which
   // has no main worktree to own them. The dirs resolve once for both checks. The
   // session hooks the caller regenerates after this are per-checkout and unaffected.
-  const dirs = force ? null : resolveGitDirs(gitRoot);
-  if (dirs && isLinkedFromDirs(dirs) && !isInsideDir(hooksDir, gitRoot) && !isBareFromDirs(dirs)) {
+  if (!force && sharedHooksOwnedByMainWorktree(gitRoot, hooksDir)) {
     console.error(HOOKS_SHARED_WORKTREE_MSG);
     return null;
   }
