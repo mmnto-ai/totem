@@ -1709,6 +1709,25 @@ describe('installHooksNonInteractive', () => {
     expect(isLinkedWorktree(sub)).toBe(true);
   });
 
+  it('commonRepositoryIsBare falls back to the two config files when git cannot answer', () => {
+    // A `gitdir:` pointer git cannot resolve (no HEAD or objects at the target), whose
+    // `commondir` names a directory under our control: every read below is the fallback.
+    const root = path.join(tmpDir, 'fb');
+    const gitDir = path.join(tmpDir, 'fb-gitdir');
+    const common = path.join(gitDir, 'common');
+    fs.mkdirSync(root, { recursive: true });
+    fs.mkdirSync(common, { recursive: true });
+    fs.writeFileSync(path.join(root, '.git'), `gitdir: ${gitDir}\n`);
+    fs.writeFileSync(path.join(gitDir, 'commondir'), 'common\n');
+    expect(isLinkedWorktree(root)).toBe(true);
+    expect(commonRepositoryIsBare(root)).toBe(false);
+    fs.writeFileSync(path.join(common, 'config'), '[core]\n\tbare = false\n');
+    expect(commonRepositoryIsBare(root)).toBe(false);
+    // The flag in the other file, in another spelling git accepts.
+    fs.writeFileSync(path.join(common, 'config.worktree'), '[core]\n\tbare = on\n');
+    expect(commonRepositoryIsBare(root)).toBe(true);
+  });
+
   it('a linked worktree skips the shared hooks without --force, says why, and writes them with --force', async () => {
     const { main, linked } = initRepoWithWorktree(tmpDir);
     const sharedHooksDir = path.join(main, '.git', 'hooks');
