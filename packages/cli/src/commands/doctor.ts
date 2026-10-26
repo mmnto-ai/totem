@@ -225,8 +225,10 @@ export async function checkGitHooks(
   );
   const ownedByMainWorktree =
     installer !== null && installer.sharedHooksOwnedByMainWorktree(gitRoot, hooksDir);
+  // The redirect LEADS the remedy, so the first thing a reader copies is the safe
+  // instruction and the command that would revert the shared hooks comes after it.
   const fromMainWorktree = ownedByMainWorktree
-    ? " — run it from the main worktree: this is a linked worktree, the hooks are shared by every worktree of the repository, and from here a bare install skips them while `--force` writes THIS checkout's templates for all of them (mmnto-ai/totem#3122)"
+    ? "From this linked worktree, run the remedy from the main worktree — the hooks are shared by every worktree of the repository, a bare install from here skips them, and `--force` from here writes THIS checkout's templates for all of them (mmnto-ai/totem#3122). The remedy there: "
     : '';
   const judgedHere = ownedByMainWorktree
     ? " (judged against this checkout's templates; the main worktree's may be newer)"
@@ -266,7 +268,7 @@ export async function checkGitHooks(
         name: 'Git Hooks',
         status: 'warn',
         message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${sensed.totemDir}': ${sensed.failure}`,
-        remediation: `totem hook install --force (re-renders the four hooks from the current config)${fromMainWorktree}`,
+        remediation: `${fromMainWorktree}totem hook install --force (re-renders the four hooks from the current config)`,
       };
     }
     const stale = sensed.stale;
@@ -347,11 +349,11 @@ export async function checkGitHooks(
         );
       }
       const remediation =
+        fromMainWorktree +
         clauses.join('; ') +
         (appended.length > 0
           ? ' — `--force` rewrites the whole file and would overwrite your own hook content'
-          : '') +
-        fromMainWorktree;
+          : '');
       // The headline names the cause. A `non-utf8` row's block may be byte-identical
       // to the canonical (the bad byte on its shebang line), so "does not match …
       // the managed block is stale" would be two false statements about it (final
@@ -386,7 +388,7 @@ export async function checkGitHooks(
     name: 'Git Hooks',
     status: 'warn',
     message: `${installed}/${markers.length} hooks installed (missing: ${missing.join(', ')})`,
-    remediation: `totem hooks${fromMainWorktree}`,
+    remediation: `${fromMainWorktree}totem hooks`,
   };
 }
 

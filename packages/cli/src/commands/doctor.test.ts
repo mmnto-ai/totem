@@ -257,7 +257,12 @@ describe('checkGitHooks', () => {
       const missing = await checkGitHooks(linked);
       expect(missing.status).toBe('warn');
       expect(missing.remediation).toContain('totem hooks');
-      expect(missing.remediation).toContain('run it from the main worktree');
+      // The redirect LEADS: the first thing a reader copies is the safe instruction.
+      expect(
+        missing.remediation!.startsWith(
+          'From this linked worktree, run the remedy from the main worktree',
+        ),
+      ).toBe(true);
 
       // Stale shared hooks, as an older worktree's install leaves them.
       const hooksDir = path.join(main, '.git', 'hooks');
@@ -273,8 +278,16 @@ describe('checkGitHooks', () => {
       const stale = await checkGitHooks(linked);
       expect(stale.status).toBe('warn');
       expect(stale.message).toContain("judged against this checkout's templates");
-      expect(stale.remediation).toContain('run it from the main worktree');
-      expect(stale.remediation).toContain('`--force` writes THIS checkout');
+      expect(
+        stale.remediation!.startsWith(
+          'From this linked worktree, run the remedy from the main worktree',
+        ),
+      ).toBe(true);
+      expect(stale.remediation).toContain('`--force` from here writes THIS checkout');
+      // The reverting command sits after the redirect, never before it.
+      expect(stale.remediation!.indexOf('The remedy there: ')).toBeLessThan(
+        stale.remediation!.indexOf('totem hook install --force'),
+      );
 
       const fromMain = await checkGitHooks(main);
       expect(fromMain.status).toBe('warn');
