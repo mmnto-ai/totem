@@ -1200,6 +1200,52 @@ describe('runCompiledRules', () => {
         }
       });
 
+      it('scrubs git location variables from every blob read, so a hook-exported GIT_DIR cannot repoint them', async () => {
+        // Git exports GIT_DIR (and under some invocations GIT_WORK_TREE) into a
+        // hook's environment; a child git that inherits them resolves against
+        // that location instead of the cwd it was given. The reader scrubs them
+        // as the repository's other repository-bound reads do (round 2).
+        writeRules(tmpDir, [fooRule()]);
+        fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), BAR);
+        const envs: Array<NodeJS.ProcessEnv | undefined> = [];
+        const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+        const mockExec = vi
+          .spyOn(totem, 'safeExec')
+          .mockImplementation(
+            (_cmd: string, args?: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
+              envs.push(opts?.env);
+              if (!args) return '';
+              if (args[0] === 'ls-tree' && args[1] === 'HEAD')
+                return '100644 blob hash\tsrc/app.ts\n';
+              if (args[0] === 'show') return FOO;
+              return '';
+            },
+          );
+        const prior = {
+          GIT_DIR: process.env['GIT_DIR'],
+          GIT_WORK_TREE: process.env['GIT_WORK_TREE'],
+        };
+        process.env['GIT_DIR'] = '.git';
+        process.env['GIT_WORK_TREE'] = tmpDir;
+        try {
+          expect(await violationCount({ readFromHead: true })).toBe(1);
+          expect(envs.length).toBeGreaterThan(0);
+          for (const env of envs) {
+            expect(env?.['GIT_DIR']).toBeUndefined();
+            expect(env?.['GIT_WORK_TREE']).toBeUndefined();
+            expect(env?.['LC_ALL']).toBe('C');
+          }
+        } finally {
+          for (const [key, value] of Object.entries(prior)) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+          }
+          mockResolveGitRoot.mockRestore();
+          mockExec.mockRestore();
+        }
+      });
+
       it("a HEAD read failure inside the classifier is the run's failure, not raw matching", async () => {
         // A regex rule only, so no rule path reads the file: the classifier is the
         // sole reader. Before the round-1 fold its catch swallowed the reader's

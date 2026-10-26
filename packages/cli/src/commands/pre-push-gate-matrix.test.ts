@@ -57,11 +57,11 @@ describe('buildPrePushHook — gate-mapped strict arm (structural, all platforms
     // Its wording names what a bare run reads (mmnto-ai/totem#3048); the
     // pre-fix line said only that the mapping was off.
     expect(hook).toContain(
-      'Hook running review in compat mode (CLI without --gate): the declared gate mapping and the push-range scope are both off, so this run reads uncommitted edits first and the branch diff only on a clean tree',
+      "Hook running review in compat mode (CLI without --gate): the declared gate mapping and the branch-vs-base scope are both off, so this run reads uncommitted edits first and the checked-out HEAD's branch diff only on a clean tree",
     );
   });
 
-  // mmnto-ai/totem#3048: the lint step grades the pushed range too. A pre-fix
+  // mmnto-ai/totem#3048: the lint step grades the checked-out HEAD's branch range too. A pre-fix
   // render carries the bare `lint` line only and none of the four below.
   it('the lint step probes lint --help for --branch, runs lint --branch, and keeps the bare form behind a visible compat line — in that order, before the shield arm', () => {
     const probeIdx = hook.indexOf(
@@ -76,7 +76,7 @@ describe('buildPrePushHook — gate-mapped strict arm (structural, all platforms
     expect(bareIdx).toBeGreaterThan(compatIdx);
     expect(hook).toMatch(/Hook running lint in compat mode[^\n]*" >&2/);
     expect(hook).toContain(
-      'Hook running lint in compat mode (CLI without --branch): this run reads uncommitted edits first and the branch diff only on a clean tree, not the pushed range',
+      "Hook running lint in compat mode (CLI without --branch): this run reads uncommitted edits first and the checked-out HEAD's branch diff only on a clean tree",
     );
     expect(bareIdx).toBeLessThan(hook.indexOf('$TOTEM_CMD review --gate --branch || exit 1'));
   });
@@ -196,7 +196,7 @@ exit 0
     fs.writeFileSync(path.join(repoDir, '.totem', 'compiled-rules.json'), '[]');
   }
 
-  it('supported --gate: invokes the gate-mapped form over the pushed range and passes', () => {
+  it('supported --gate: invokes the gate-mapped form over the branch-vs-base range and passes', () => {
     writeStub({
       helpText: 'Usage: totem review\n  --gate  declared mapping',
       helpExit: 0,
@@ -272,7 +272,7 @@ exit 0
     expect(invocations()).toContain('lint');
     expect(invocations()).not.toContain('lint --branch');
     expect(result.stderr).toMatch(
-      /Hook running lint in compat mode \(CLI without --branch\): this run reads uncommitted edits first and the branch diff only on a clean tree, not the pushed range/,
+      /Hook running lint in compat mode \(CLI without --branch\): this run reads uncommitted edits first and the checked-out HEAD's branch diff only on a clean tree/,
     );
   });
 

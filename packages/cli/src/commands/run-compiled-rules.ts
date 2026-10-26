@@ -373,6 +373,7 @@ export async function runCompiledRules(
     sanitizeForTerminal,
     saveRuleMetrics,
     TotemError,
+    envWithoutGitLocation,
   } = await import('@mmnto/totem');
   type RuleEngineContext = import('@mmnto/totem').RuleEngineContext;
 
@@ -553,6 +554,10 @@ export async function runCompiledRules(
   // are then the commits being pushed, so an unsaved edit can neither hide a
   // pushed violation nor block a clean push. `isStaged` wins when a caller sets
   // both. Outside both, the strategy stays undefined and the worktree is read.
+  // Both git reads run with the repository-location variables scrubbed
+  // (envWithoutGitLocation): git exports GIT_DIR into the hook processes it
+  // spawns, and a child that inherits them answers for whatever repository they
+  // name rather than the cwd it was given (mmnto-ai/totem#3114 round 2).
   const blobSource = isStaged
     ? {
         ref: '',
@@ -593,7 +598,7 @@ export async function runCompiledRules(
         //    also declaring a minimum Git version.
         const lsOutput = safeExec('git', [...probe, '--', filePath], {
           cwd: repoRoot,
-          env: { ...process.env, LC_ALL: 'C' },
+          env: { ...envWithoutGitLocation(process.env), LC_ALL: 'C' },
         });
         if (lsOutput.startsWith('120000 ') || lsOutput.startsWith('160000 ')) {
           return null; // not a file blob: no AST read, no requirement text, no classification
@@ -603,7 +608,7 @@ export async function runCompiledRules(
         const content = safeExec('git', ['show', `${ref}:${filePath}`], {
           cwd: repoRoot,
           trim: false,
-          env: { ...process.env, LC_ALL: 'C' },
+          env: { ...envWithoutGitLocation(process.env), LC_ALL: 'C' },
         });
 
         // 3. Normalize CRLF to LF specifically for the blob callback

@@ -1366,8 +1366,9 @@ export function buildPrePushHook(options: {
     # wiring's declared disposition→exit mapping — not-applicable admissions
     # and completed rounds pass (findings are report-only in hook context),
     # hard failures and unknown dispositions block. --branch makes the gate
-    # read the pushed range (mmnto-ai/totem#3048): the diff it grades is the
-    # branch-vs-base diff regardless of working-tree state, and the admission
+    # read the checked-out HEAD's branch-vs-base range (mmnto-ai/totem#3048):
+    # the diff it grades is that diff regardless of working-tree state (the
+    # stdin ref list is mmnto-ai/totem#2793), and the admission
     # record names that scope (source and base); the full-file context an
     # admitted review reads still comes from the checkout. It rides the --gate
     # probe — every CLI that answers it has carried --branch since 1.53.9 —
@@ -1378,7 +1379,7 @@ export function buildPrePushHook(options: {
     if $TOTEM_CMD review --help 2>/dev/null | grep -q -- '--gate'; then
       $TOTEM_CMD review --gate --branch || exit 1
     else
-      echo "[totem] Hook running review in compat mode (CLI without --gate): the declared gate mapping and the push-range scope are both off, so this run reads uncommitted edits first and the branch diff only on a clean tree; 'npm i -g @mmnto/cli@latest' enables both." >&2
+      echo "[totem] Hook running review in compat mode (CLI without --gate): the declared gate mapping and the branch-vs-base scope are both off, so this run reads uncommitted edits first and the checked-out HEAD's branch diff only on a clean tree; 'npm i -g @mmnto/cli@latest' enables both." >&2
       $TOTEM_CMD review || exit 1
     fi
   fi`;
@@ -1400,7 +1401,8 @@ if [ -n "$TOTEM_CMD" ]; then
     fi
   fi
 
-  # Run deterministic lint over the pushed range (mmnto-ai/totem#3048). The bare
+  # Run deterministic lint over the checked-out HEAD's branch-vs-base range
+  # (mmnto-ai/totem#3048; the stdin ref list is mmnto-ai/totem#2793). The bare
   # verb reads uncommitted edits first and falls to branch-vs-base only on a
   # clean tree, so a dirty checkout had this gate lint edits that were not being
   # pushed and skip the commits that were. --branch forces the branch-vs-base
@@ -1415,7 +1417,7 @@ if [ -n "$TOTEM_CMD" ]; then
         exit 1
       fi
     else
-      echo "[totem] Hook running lint in compat mode (CLI without --branch): this run reads uncommitted edits first and the branch diff only on a clean tree, not the pushed range; 'npm i -g @mmnto/cli@latest' enables the push-range scope." >&2
+      echo "[totem] Hook running lint in compat mode (CLI without --branch): this run reads uncommitted edits first and the checked-out HEAD's branch diff only on a clean tree; 'npm i -g @mmnto/cli@latest' makes it read that branch diff on every push." >&2
       if ! $TOTEM_CMD lint; then
         exit 1
       fi
