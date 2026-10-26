@@ -1726,6 +1726,47 @@ describe('installHooksNonInteractive', () => {
     // The flag in the other file, in another spelling git accepts.
     fs.writeFileSync(path.join(common, 'config.worktree'), '[core]\n\tbare = on\n');
     expect(commonRepositoryIsBare(root)).toBe(true);
+
+    // The read is section-aware and value-aware, as git's own is: a quoted value and
+    // a trailing comment count, a `bare = true` under another section does not.
+    fs.rmSync(path.join(common, 'config.worktree'));
+    fs.writeFileSync(path.join(common, 'config'), '[core]\n\tbare = "true"\n');
+    expect(commonRepositoryIsBare(root)).toBe(true);
+    fs.writeFileSync(path.join(common, 'config'), '[core]\n\tbare = true # bare clone\n');
+    expect(commonRepositoryIsBare(root)).toBe(true);
+    fs.writeFileSync(
+      path.join(common, 'config'),
+      '[core]\n\tbare = false\n[remote "stray"]\n\tbare = true\n',
+    );
+    expect(commonRepositoryIsBare(root)).toBe(false);
+  });
+
+  it("a hooks dir named with a leading `..` inside the worktree is the worktree's own, not a parent path", async () => {
+    const { linked } = initRepoWithWorktree(tmpDir);
+    // `path.relative` yields `..hooks` for this directory; only `..` as a SEGMENT
+    // means outside.
+    execFileSync('git', ['-C', linked, 'config', 'core.hooksPath', '..hooks'], { stdio: 'ignore' });
+    const result = await installHooksNonInteractive(linked);
+    expect(result).not.toBeNull();
+    expect(fs.existsSync(path.join(linked, '..hooks', 'pre-push'))).toBe(true);
+  });
+
+  it('a hooks dir inside the worktree that is a symlink to the shared hooks dir is shared: the install skips', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    const sharedHooksDir = path.join(main, '.git', 'hooks');
+    fs.mkdirSync(sharedHooksDir, { recursive: true });
+    // A relative core.hooksPath reads as per-worktree, but the directory it names is
+    // a link to the hooks every worktree runs: the real location decides.
+    fs.symlinkSync(sharedHooksDir, path.join(linked, '.githooks'), 'junction');
+    execFileSync('git', ['-C', main, 'config', 'core.hooksPath', '.githooks'], { stdio: 'ignore' });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await installHooksNonInteractive(linked);
+      expect(result).toBeNull();
+      expect(fs.existsSync(path.join(sharedHooksDir, 'pre-push'))).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('a linked worktree skips the shared hooks without --force, says why, and writes them with --force', async () => {

@@ -62,10 +62,9 @@ function resolveHooksDir() {
     // flag lives in `config`, or in `config.worktree` once extensions.worktreeConfig
     // is on (git sparse-checkout turns it on and moves the flag there), in any
     // boolean spelling git accepts.
-    const bareLine = /^\s*bare\s*(?:=\s*(?:true|yes|on|1))?\s*$/im;
     const bare = ['config', 'config.worktree'].some((name) => {
       const file = join(commonDirPath, name);
-      return existsSync(file) && bareLine.test(readFileSync(file, 'utf-8'));
+      return existsSync(file) && configSaysBare(readFileSync(file, 'utf-8'));
     });
     if (!bare && process.env.TOTEM_HOOKS_FORCE !== '1') {
       console.log(
@@ -76,6 +75,34 @@ function resolveHooksDir() {
     return join(commonDirPath, 'hooks');
   }
   return join(gitDir, 'hooks');
+}
+
+/**
+ * Whether a git config text sets `core.bare` true, read the way git reads it: under
+ * `[core]` only, the last occurrence winning, a bare key or a value in any boolean
+ * spelling git accepts (true, yes, on, 1), a quoted value unquoted, a trailing `#`
+ * or `;` comment dropped. The same read as the CLI installer's fallback; this
+ * script runs on vanilla Node at `prepare` and cannot import it.
+ */
+function configSaysBare(text) {
+  let inCore = false;
+  let bare = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith('[')) {
+      inCore = /^\[core\]/i.test(line);
+      continue;
+    }
+    if (!inCore) continue;
+    const match = /^bare\s*(?:=\s*(.*))?$/i.exec(line);
+    if (!match) continue;
+    const rest = match[1];
+    const quoted = rest === undefined ? null : /^"([^"]*)"/.exec(rest);
+    const value =
+      rest === undefined ? 'true' : quoted ? quoted[1] : rest.replace(/\s*[#;].*$/, '').trim();
+    bare = /^(?:true|yes|on|1)$/i.test(value);
+  }
+  return bare;
 }
 
 const hooksDir = resolveHooksDir();

@@ -131,8 +131,34 @@ export function isLinkedWorktree(gitRoot: string): boolean {
   return dirs !== null && isLinkedFromDirs(dirs);
 }
 
-/** A `core.bare` line in a git config file, in every boolean spelling git accepts. */
-const BARE_CONFIG_LINE = /^\s*bare\s*(?:=\s*(?:true|yes|on|1))?\s*$/im;
+/**
+ * Whether a git config text sets `core.bare` true, read the way git reads it:
+ * under `[core]` only, the last occurrence winning, a bare key or a value in any
+ * boolean spelling git accepts (`true`, `yes`, `on`, `1`, case-insensitive), a
+ * quoted value unquoted, a trailing `#` or `;` comment dropped. An `include`
+ * directive is not followed; the git read above is the primary and this the
+ * fallback.
+ */
+function configSaysBare(text: string): boolean {
+  let inCore = false;
+  let bare = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith('[')) {
+      inCore = /^\[core\]/i.test(line);
+      continue;
+    }
+    if (!inCore) continue;
+    const match = /^bare\s*(?:=\s*(.*))?$/i.exec(line);
+    if (!match) continue;
+    const rest = match[1];
+    const quoted = rest === undefined ? null : /^"([^"]*)"/.exec(rest);
+    const value =
+      rest === undefined ? 'true' : quoted ? quoted[1]! : rest.replace(/\s*[#;].*$/, '').trim();
+    bare = /^(?:true|yes|on|1)$/i.test(value);
+  }
+  return bare;
+}
 
 function isBareFromDirs(dirs: GitDirs): boolean {
   // git's own answer, asked IN the common dir: it reads core.bare wherever git
@@ -147,14 +173,36 @@ function isBareFromDirs(dirs: GitDirs): boolean {
   // When that read fails: both files, every spelling.
   return ['config', 'config.worktree'].some((name) => {
     const file = path.join(dirs.commonDir, name);
-    return fs.existsSync(file) && BARE_CONFIG_LINE.test(fs.readFileSync(file, 'utf-8'));
+    return fs.existsSync(file) && configSaysBare(fs.readFileSync(file, 'utf-8'));
   });
 }
 
-/** Whether `child` lies inside `parent`; the same directory counts as inside. */
+/**
+ * Whether `child` lies inside `parent`; the same directory counts as inside. Only
+ * a `..` SEGMENT means outside — a directory named `..hooks` is inside — and a
+ * different drive (an absolute relative path on Windows) is outside.
+ */
 function isInsideDir(child: string, parent: string): boolean {
   const rel = path.relative(parent, child);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
+
+/**
+ * `target`'s real path, resolving its nearest existing ancestor and keeping the
+ * rest of the path verbatim, so a hooks dir that does not exist yet still compares
+ * by where it would be created and a link inside a worktree to the shared hooks
+ * dir compares by where it points.
+ */
+function realpathNearest(target: string): string {
+  const tail: string[] = [];
+  let probe = target;
+  while (!fs.existsSync(probe)) {
+    const parent = path.dirname(probe);
+    if (parent === probe) return target;
+    tail.unshift(path.basename(probe));
+    probe = parent;
+  }
+  return path.join(fs.realpathSync.native(probe), ...tail);
 }
 
 /**
@@ -170,7 +218,7 @@ export function sharedHooksOwnedByMainWorktree(gitRoot: string, hooksDir: string
   return (
     dirs !== null &&
     isLinkedFromDirs(dirs) &&
-    !isInsideDir(hooksDir, gitRoot) &&
+    !isInsideDir(realpathNearest(hooksDir), realpathNearest(gitRoot)) &&
     !isBareFromDirs(dirs)
   );
 }

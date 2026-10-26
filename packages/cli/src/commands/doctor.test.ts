@@ -293,6 +293,14 @@ describe('checkGitHooks', () => {
       expect(fromMain.status).toBe('warn');
       expect(fromMain.remediation).not.toContain('main worktree');
       expect(fromMain.message).not.toContain('judged against');
+
+      // A PASS from the linked worktree names the same baseline, so the two results
+      // from one checkout never name different ones; from the main worktree, unchanged.
+      await installCanonical(main, '.totem');
+      const pass = await checkGitHooks(linked);
+      expect(pass.status).toBe('pass');
+      expect(pass.message).toContain("judged against this checkout's templates");
+      expect((await checkGitHooks(main)).message).toBe('All 4 hooks installed');
     } finally {
       cleanTmpDir(tmpDir);
     }

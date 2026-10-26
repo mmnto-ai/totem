@@ -380,7 +380,7 @@ export async function checkGitHooks(
     return {
       name: 'Git Hooks',
       status: 'pass',
-      message: `All ${markers.length} hooks installed`,
+      message: `All ${markers.length} hooks installed${judgedHere}`,
     };
   }
 

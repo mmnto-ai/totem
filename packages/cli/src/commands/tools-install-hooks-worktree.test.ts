@@ -140,4 +140,40 @@ describe('tools/install-hooks.js from a linked worktree (mmnto-ai/totem#3122)', 
       expect(fs.readFileSync(path.join(bare, 'hooks', hook), 'utf-8')).toContain(`bare ${hook}`);
     }
   });
+
+  it('a quoted or commented core.bare value still reads bare', () => {
+    const bare = path.join(tmpDir, 'repo.git');
+    git(['clone', '-q', '--bare', main, bare], tmpDir);
+    const checkout = path.join(tmpDir, 'bare-wt');
+    git(['-C', bare, 'worktree', 'add', '-q', checkout, 'HEAD'], tmpDir);
+    const config = path.join(bare, 'config');
+    fs.writeFileSync(
+      config,
+      fs
+        .readFileSync(config, 'utf-8')
+        .replace(/^\s*bare\s*=.*$/m, '\tbare = "true" # a bare clone'),
+    );
+    plantScript(checkout, 'bare');
+
+    const run = runScript(checkout);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).not.toContain('Linked worktree');
+    for (const hook of HOOKS) {
+      expect(fs.readFileSync(path.join(bare, 'hooks', hook), 'utf-8')).toContain(`bare ${hook}`);
+    }
+  });
+
+  it('a stray `bare = true` outside [core] does not make a linked worktree write', () => {
+    plantScript(main, 'main');
+    expect(runScript(main).status).toBe(0);
+    fs.appendFileSync(path.join(main, '.git', 'config'), '[remote "stray"]\n\tbare = true\n');
+    plantScript(linked, 'topic');
+
+    const run = runScript(linked);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('Linked worktree');
+    for (const hook of HOOKS) expect(installedHook(main, hook)).toContain(`main ${hook}`);
+  });
 });
