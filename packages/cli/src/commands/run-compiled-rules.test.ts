@@ -1225,15 +1225,64 @@ describe('runCompiledRules', () => {
         const prior = {
           GIT_DIR: process.env['GIT_DIR'],
           GIT_WORK_TREE: process.env['GIT_WORK_TREE'],
+          GIT_INDEX_FILE: process.env['GIT_INDEX_FILE'],
         };
         process.env['GIT_DIR'] = '.git';
         process.env['GIT_WORK_TREE'] = tmpDir;
+        process.env['GIT_INDEX_FILE'] = '.git/next-index-1';
         try {
           expect(await violationCount({ readFromHead: true })).toBe(1);
           expect(envs.length).toBeGreaterThan(0);
           for (const env of envs) {
             expect(env?.['GIT_DIR']).toBeUndefined();
             expect(env?.['GIT_WORK_TREE']).toBeUndefined();
+            // HEAD reads never consult an index, so the hook's temporary one goes too.
+            expect(env?.['GIT_INDEX_FILE']).toBeUndefined();
+            expect(env?.['LC_ALL']).toBe('C');
+          }
+        } finally {
+          for (const [key, value] of Object.entries(prior)) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+          }
+          mockResolveGitRoot.mockRestore();
+          mockExec.mockRestore();
+        }
+      });
+
+      it('the staged reader keeps GIT_INDEX_FILE, the temporary index a partial commit names, while scrubbing the rest', async () => {
+        // `git commit <path>` runs its pre-commit hook against a temporary index
+        // that holds the files being committed and names it in GIT_INDEX_FILE;
+        // a staged read that dropped the name would read the real index, which
+        // may hold different content for the same path (round 3).
+        writeRules(tmpDir, [fooRule()]);
+        fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), BAR);
+        const envs: Array<NodeJS.ProcessEnv | undefined> = [];
+        const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+        const mockExec = vi
+          .spyOn(totem, 'safeExec')
+          .mockImplementation(
+            (_cmd: string, args?: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
+              envs.push(opts?.env);
+              if (!args) return '';
+              if (args[0] === 'ls-files' && args[1] === '-s') return '100644 hash 0\tsrc/app.ts\n';
+              if (args[0] === 'show') return FOO;
+              return '';
+            },
+          );
+        const prior = {
+          GIT_DIR: process.env['GIT_DIR'],
+          GIT_INDEX_FILE: process.env['GIT_INDEX_FILE'],
+        };
+        process.env['GIT_DIR'] = '.git';
+        process.env['GIT_INDEX_FILE'] = '.git/next-index-1';
+        try {
+          expect(await violationCount({ isStaged: true })).toBe(1);
+          expect(envs.length).toBeGreaterThan(0);
+          for (const env of envs) {
+            expect(env?.['GIT_DIR']).toBeUndefined();
+            expect(env?.['GIT_INDEX_FILE']).toBe('.git/next-index-1');
             expect(env?.['LC_ALL']).toBe('C');
           }
         } finally {

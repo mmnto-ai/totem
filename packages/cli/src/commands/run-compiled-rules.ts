@@ -578,6 +578,17 @@ export async function runCompiledRules(
   let blobReadStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
   if (blobSource !== undefined && repoRoot) {
     const { ref, probe, code, noun, cure } = blobSource;
+    // The staged reader keeps GIT_INDEX_FILE: a partial commit (`git commit
+    // <path>`) runs its pre-commit hook against a TEMPORARY index that holds the
+    // files being committed, and names it through that variable; the index is
+    // this reader's subject, so dropping the name would read the wrong one
+    // (mmnto-ai/totem#3114 round 3). The HEAD reader never consults an index.
+    const indexFile = process.env['GIT_INDEX_FILE'];
+    const childEnv: NodeJS.ProcessEnv = {
+      ...envWithoutGitLocation(process.env),
+      ...(isStaged && indexFile !== undefined ? { GIT_INDEX_FILE: indexFile } : {}),
+      LC_ALL: 'C',
+    };
     blobReadStrategy = async (filePath: string) => {
       try {
         // 1. Skip what `git show` cannot render as a file: a symlink (mode
@@ -598,7 +609,7 @@ export async function runCompiledRules(
         //    also declaring a minimum Git version.
         const lsOutput = safeExec('git', [...probe, '--', filePath], {
           cwd: repoRoot,
-          env: { ...envWithoutGitLocation(process.env), LC_ALL: 'C' },
+          env: childEnv,
         });
         if (lsOutput.startsWith('120000 ') || lsOutput.startsWith('160000 ')) {
           return null; // not a file blob: no AST read, no requirement text, no classification
@@ -608,7 +619,7 @@ export async function runCompiledRules(
         const content = safeExec('git', ['show', `${ref}:${filePath}`], {
           cwd: repoRoot,
           trim: false,
-          env: { ...envWithoutGitLocation(process.env), LC_ALL: 'C' },
+          env: childEnv,
         });
 
         // 3. Normalize CRLF to LF specifically for the blob callback
