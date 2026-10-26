@@ -63,9 +63,10 @@ export interface RunCompiledRulesOptions {
    * bytes judged are then the commits being pushed, so an unsaved edit can
    * neither hide a pushed violation nor block a clean push. `isStaged` wins
    * when a caller sets both. On a rule path a failed read is
-   * `HEAD_READ_FAILED`, never a silent worktree fallback; the advisory
-   * AST-context classifier, which reads through the same strategy, skips a
-   * file whose read returns null and never reads the disk under this scope.
+   * `HEAD_READ_FAILED`, never a silent worktree fallback; the AST-context
+   * classifier, which reads through the same strategy, skips a file whose read
+   * returns null, raises the reader's failure like the rule paths, and never
+   * reads the disk under this scope.
    */
   readFromHead?: boolean;
   /**
@@ -625,8 +626,11 @@ export async function runCompiledRules(
   // (mmnto-ai/totem#3048 read 2): the classifier decides which added lines are
   // code, so under a blob scope it must not read the index or the disk. With no
   // blob reader the gate keeps its own index-then-disk default (the uncommitted
-  // scope). A reader failure here is caught below into "raw matching", which
-  // fails toward flagging; the rule paths raise the same failure loudly.
+  // scope). A blob reader's failure here is the run's failure, as it is on the
+  // rule paths (mmnto-ai/totem#3114 round 1): the ast-gate contract has an
+  // injected reader's throw propagate, since a blob that cannot be read must not
+  // silently no-match. Every other classification failure keeps the advisory
+  // fall-back to raw matching, which fails toward flagging.
   try {
     await enrichWithAstContext(additions, {
       cwd: repoRoot ?? cwd,
@@ -636,8 +640,14 @@ export async function runCompiledRules(
     if (classified > 0) {
       log.dim(tag, `AST classified ${classified}/${additions.length} additions`);
     }
+  } catch (err) {
+    if (
+      err instanceof TotemError &&
+      (err.code === 'STAGED_READ_FAILED' || err.code === 'HEAD_READ_FAILED')
+    ) {
+      throw err;
+    }
     // totem-context: intentional graceful degradation — AST enrichment is best-effort
-  } catch {
     log.dim(tag, 'AST classification unavailable, falling back to raw matching');
   }
 

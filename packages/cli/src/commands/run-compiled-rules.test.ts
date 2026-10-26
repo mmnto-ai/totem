@@ -1200,6 +1200,31 @@ describe('runCompiledRules', () => {
         }
       });
 
+      it("a HEAD read failure inside the classifier is the run's failure, not raw matching", async () => {
+        // A regex rule only, so no rule path reads the file: the classifier is the
+        // sole reader. Before the round-1 fold its catch swallowed the reader's
+        // throw and the regex hit fired as "raw matching"; a blob scope now fails
+        // loud wherever the blob cannot be read.
+        writeRules(tmpDir, [makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log')]);
+        const { restore } = divergence({ disk: FOO, head: FOO, showThrows: true });
+        try {
+          const run = runCompiledRules({
+            diff: makeDiff('src/app.ts', '  console.log("foo");'),
+            cwd: tmpDir,
+            totemDir: TOTEM_DIR,
+            format: 'json',
+            tag: 'Test',
+            readFromHead: true,
+          });
+          await expect(run).rejects.toMatchObject({
+            name: 'TotemError',
+            code: 'HEAD_READ_FAILED',
+          });
+        } finally {
+          restore();
+        }
+      });
+
       it('throws HEAD_READ_FAILED when git show HEAD:<file> fails — never a silent disk fallback', async () => {
         writeRules(tmpDir, [fooRule()]);
         const { restore } = divergence({ disk: BAR, head: FOO, showThrows: true });
