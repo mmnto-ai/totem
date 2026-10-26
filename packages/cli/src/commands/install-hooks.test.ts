@@ -1725,6 +1725,13 @@ describe('installHooksNonInteractive', () => {
     expect(commonRepositoryIsBare(root)).toBe(false);
     // The flag in the other file, in another spelling git accepts.
     fs.writeFileSync(path.join(common, 'config.worktree'), '[core]\n\tbare = on\n');
+    // git reads config.worktree only when `config` turns the extension on; so does
+    // the fallback, else a stale flag there would bypass the guard.
+    expect(commonRepositoryIsBare(root)).toBe(false);
+    fs.writeFileSync(
+      path.join(common, 'config'),
+      '[core]\n\tbare = false\n[extensions]\n\tworktreeConfig = true\n',
+    );
     expect(commonRepositoryIsBare(root)).toBe(true);
 
     // The read is section-aware and value-aware, as git's own is: a quoted value and
@@ -1767,6 +1774,40 @@ describe('installHooksNonInteractive', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('an absolute core.hooksPath in the shared config is shared wherever it lies: the install skips even when it points inside this worktree', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    // Every worktree runs this directory by the shared config, so one worktree writing
+    // it is the same hazard as writing the common hooks dir.
+    const insideLinked = path.join(linked, 'hooks-for-everyone');
+    execFileSync('git', ['-C', main, 'config', 'core.hooksPath', insideLinked], {
+      stdio: 'ignore',
+    });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await installHooksNonInteractive(linked)).toBeNull();
+      expect(fs.existsSync(path.join(insideLinked, 'pre-push'))).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a core.hooksPath set in the worktree's own config.worktree is per-worktree wherever it lies: the install writes", async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    for (const args of [
+      ['config', 'core.repositoryformatversion', '1'],
+      ['config', 'extensions.worktreeConfig', 'true'],
+    ]) {
+      execFileSync('git', ['-C', main, ...args], { stdio: 'ignore' });
+    }
+    const outside = path.join(tmpDir, 'wt-hooks-outside');
+    execFileSync('git', ['-C', linked, 'config', '--worktree', 'core.hooksPath', outside], {
+      stdio: 'ignore',
+    });
+    const result = await installHooksNonInteractive(linked);
+    expect(result).not.toBeNull();
+    expect(fs.existsSync(path.join(outside, 'pre-push'))).toBe(true);
   });
 
   it('a linked worktree skips the shared hooks without --force, says why, and writes them with --force', async () => {

@@ -132,24 +132,26 @@ export function isLinkedWorktree(gitRoot: string): boolean {
 }
 
 /**
- * Whether a git config text sets `core.bare` true, read the way git reads it:
- * under `[core]` only, the last occurrence winning, a bare key or a value in any
- * boolean spelling git accepts (`true`, `yes`, `on`, `1`, case-insensitive), a
- * quoted value unquoted, a trailing `#` or `;` comment dropped. An `include`
- * directive is not followed; the git read above is the primary and this the
- * fallback.
+ * Whether a git config text sets the boolean `section.key` true, read the way git
+ * reads it: under `[section]` only, the last occurrence winning, a bare key or a
+ * value in any boolean spelling git accepts (`true`, `yes`, `on`, `1`,
+ * case-insensitive), a quoted value unquoted, a trailing `#` or `;` comment
+ * dropped. An `include` directive is not followed; the git reads above are the
+ * primary and this the fallback.
  */
-function configSaysBare(text: string): boolean {
-  let inCore = false;
+function configBool(text: string, section: string, key: string): boolean {
+  const sectionLine = new RegExp(`^\\[${section}\\]`, 'i');
+  const keyLine = new RegExp(`^${key}\\s*(?:=\\s*(.*))?$`, 'i');
+  let inSection = false;
   let bare = false;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (line.startsWith('[')) {
-      inCore = /^\[core\]/i.test(line);
+      inSection = sectionLine.test(line);
       continue;
     }
-    if (!inCore) continue;
-    const match = /^bare\s*(?:=\s*(.*))?$/i.exec(line);
+    if (!inSection) continue;
+    const match = keyLine.exec(line);
     if (!match) continue;
     const rest = match[1];
     const quoted = rest === undefined ? null : /^"([^"]*)"/.exec(rest);
@@ -159,6 +161,11 @@ function configSaysBare(text: string): boolean {
   }
   return bare;
 }
+
+const configSaysBare = (text: string): boolean => configBool(text, 'core', 'bare');
+/** git reads `config.worktree` only when `config` turns this extension on. */
+const configEnablesWorktreeConfig = (text: string): boolean =>
+  configBool(text, 'extensions', 'worktreeConfig');
 
 function isBareFromDirs(dirs: GitDirs): boolean {
   // git's own answer, asked IN the common dir: it reads core.bare wherever git
@@ -170,21 +177,17 @@ function isBareFromDirs(dirs: GitDirs): boolean {
     encoding: 'utf-8',
   });
   if (asked.status === 0 && asked.stdout) return asked.stdout.trim() === 'true';
-  // When that read fails: both files, every spelling.
-  return ['config', 'config.worktree'].some((name) => {
-    const file = path.join(dirs.commonDir, name);
-    return fs.existsSync(file) && configSaysBare(fs.readFileSync(file, 'utf-8'));
-  });
-}
-
-/**
- * Whether `child` lies inside `parent`; the same directory counts as inside. Only
- * a `..` SEGMENT means outside — a directory named `..hooks` is inside — and a
- * different drive (an absolute relative path on Windows) is outside.
- */
-function isInsideDir(child: string, parent: string): boolean {
-  const rel = path.relative(parent, child);
-  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+  // When that read fails: `config`, and `config.worktree` only when `config` turns
+  // the extension on, as git itself reads it (a stale flag there is otherwise inert).
+  const configPath = path.join(dirs.commonDir, 'config');
+  const config = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : '';
+  if (configSaysBare(config)) return true;
+  if (!configEnablesWorktreeConfig(config)) return false;
+  const worktreeConfigPath = path.join(dirs.commonDir, 'config.worktree');
+  return (
+    fs.existsSync(worktreeConfigPath) &&
+    configSaysBare(fs.readFileSync(worktreeConfigPath, 'utf-8'))
+  );
 }
 
 /**
@@ -206,21 +209,43 @@ function realpathNearest(target: string): string {
 }
 
 /**
+ * Whether git resolves `core.hooksPath` per worktree for `gitRoot`: a value set in
+ * the worktree's own `config.worktree`, or a relative value, which git takes from
+ * the root of whichever worktree runs the hook. An absolute value in a shared
+ * config is one directory every worktree runs, wherever it lies, and an unset
+ * value is the common hooks dir. Read from git's own answer with its origin.
+ */
+function hooksPathIsPerWorktree(gitRoot: string): boolean {
+  const asked = spawnSync('git', ['config', '--show-origin', '--get', 'core.hooksPath'], {
+    cwd: gitRoot,
+    encoding: 'utf-8',
+  });
+  if (asked.status !== 0 || !asked.stdout || !asked.stdout.trim()) return false;
+  const line = asked.stdout.trim();
+  const tab = line.indexOf('\t');
+  const origin = tab === -1 ? '' : line.slice(0, tab);
+  const value = tab === -1 ? line : line.slice(tab + 1);
+  if (/config\.worktree$/.test(origin)) return true;
+  return !path.isAbsolute(value) && !value.startsWith('~');
+}
+
+/**
  * Whether the hooks dir `hooksDir` resolved for `gitRoot` is the main worktree's to
- * write: `gitRoot` is a linked worktree of a non-bare repository and the dir lies
- * outside it, so every worktree runs it (mmnto-ai/totem#3122). The one truth the
- * installer's skip and the doctor row's remedy both read; the dirs resolve once.
- * A hooks dir inside the worktree (a relative or per-worktree `core.hooksPath`) is
- * the worktree's own, and a bare repository has no main worktree to own anything.
+ * write: `gitRoot` is a linked worktree of a non-bare repository and the dir is one
+ * every worktree runs (mmnto-ai/totem#3122). The one truth the installer's skip and
+ * the doctor row's remedy both read; the dirs resolve once. The worktree's own
+ * hooks dir, which it may write, is one git resolves per worktree (a relative or
+ * `config.worktree` `core.hooksPath`) AND whose real location is not the common
+ * hooks dir, so a link to the shared directory stays shared; a bare repository has
+ * no main worktree to own anything.
  */
 export function sharedHooksOwnedByMainWorktree(gitRoot: string, hooksDir: string): boolean {
   const dirs = resolveGitDirs(gitRoot);
-  return (
-    dirs !== null &&
-    isLinkedFromDirs(dirs) &&
-    !isInsideDir(realpathNearest(hooksDir), realpathNearest(gitRoot)) &&
-    !isBareFromDirs(dirs)
-  );
+  if (dirs === null || !isLinkedFromDirs(dirs)) return false;
+  const ownDir =
+    hooksPathIsPerWorktree(gitRoot) &&
+    realpathNearest(hooksDir) !== realpathNearest(path.join(dirs.commonDir, 'hooks'));
+  return !ownDir && !isBareFromDirs(dirs);
 }
 
 /**

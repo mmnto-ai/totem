@@ -4,6 +4,7 @@
  * Idempotent — safe to re-run.
  */
 
+import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,10 +63,16 @@ function resolveHooksDir() {
     // flag lives in `config`, or in `config.worktree` once extensions.worktreeConfig
     // is on (git sparse-checkout turns it on and moves the flag there), in any
     // boolean spelling git accepts.
-    const bare = ['config', 'config.worktree'].some((name) => {
-      const file = join(commonDirPath, name);
-      return existsSync(file) && configSaysBare(readFileSync(file, 'utf-8'));
+    // git's own answer first, asked in the common dir; the two files only when git
+    // cannot answer, and `config.worktree` only when `config` turns the extension on.
+    const asked = spawnSync('git', ['rev-parse', '--is-bare-repository'], {
+      cwd: commonDirPath,
+      encoding: 'utf-8',
     });
+    const bare =
+      asked.status === 0 && asked.stdout
+        ? asked.stdout.trim() === 'true'
+        : configSaysBareInDir(commonDirPath);
     if (!bare && process.env.TOTEM_HOOKS_FORCE !== '1') {
       console.log(
         '[totem] Linked worktree: git hooks are shared by every worktree of this repository and the main worktree owns them — skipping hook installation (run `pnpm install` from the main worktree, or set TOTEM_HOOKS_FORCE=1 to copy them from this branch, each shared hook replaced whole).',
@@ -84,17 +91,19 @@ function resolveHooksDir() {
  * or `;` comment dropped. The same read as the CLI installer's fallback; this
  * script runs on vanilla Node at `prepare` and cannot import it.
  */
-function configSaysBare(text) {
-  let inCore = false;
+function configBool(text, section, key) {
+  const sectionLine = new RegExp('^\\[' + section + '\\]', 'i');
+  const keyLine = new RegExp('^' + key + '\\s*(?:=\\s*(.*))?$', 'i');
+  let inSection = false;
   let bare = false;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (line.startsWith('[')) {
-      inCore = /^\[core\]/i.test(line);
+      inSection = sectionLine.test(line);
       continue;
     }
-    if (!inCore) continue;
-    const match = /^bare\s*(?:=\s*(.*))?$/i.exec(line);
+    if (!inSection) continue;
+    const match = keyLine.exec(line);
     if (!match) continue;
     const rest = match[1];
     const quoted = rest === undefined ? null : /^"([^"]*)"/.exec(rest);
@@ -103,6 +112,19 @@ function configSaysBare(text) {
     bare = /^(?:true|yes|on|1)$/i.test(value);
   }
   return bare;
+}
+
+/** core.bare from `config`, and from `config.worktree` only when `config` turns the extension on. */
+function configSaysBareInDir(dir) {
+  const configPath = join(dir, 'config');
+  const config = existsSync(configPath) ? readFileSync(configPath, 'utf-8') : '';
+  if (configBool(config, 'core', 'bare')) return true;
+  if (!configBool(config, 'extensions', 'worktreeConfig')) return false;
+  const worktreeConfigPath = join(dir, 'config.worktree');
+  return (
+    existsSync(worktreeConfigPath) &&
+    configBool(readFileSync(worktreeConfigPath, 'utf-8'), 'core', 'bare')
+  );
 }
 
 const hooksDir = resolveHooksDir();

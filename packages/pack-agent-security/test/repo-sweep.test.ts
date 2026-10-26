@@ -252,9 +252,9 @@ const ALLOWLIST: AllowEntry[] = [
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/install-hooks.ts',
-    expectedCount: 3,
+    expectedCount: 4,
     reason:
-      'resolveHooksDir invokes `spawnSync` for one git plumbing call (`rev-parse --git-path hooks`) to locate the worktree-aware hooks directory (mmnto-ai/totem#2418); resolveGitDirs for one more (`rev-parse --git-dir --git-common-dir`) that tells a linked worktree from the main one so an install from a worktree does not rewrite the shared hooks; and isBareFromDirs for a third (`rev-parse --is-bare-repository`, run in the common dir) that lets the worktrees of a bare repository write them (mmnto-ai/totem#3122). Literal targets, fixed args, cwd anchored at the resolved git root; raw spawnSync (the doctor.ts idiom) because a static safeExec import would pull the core barrel into CLI cold-start.',
+      'resolveHooksDir invokes `spawnSync` for one git plumbing call (`rev-parse --git-path hooks`) to locate the worktree-aware hooks directory (mmnto-ai/totem#2418); resolveGitDirs for one more (`rev-parse --git-dir --git-common-dir`) that tells a linked worktree from the main one so an install from a worktree does not rewrite the shared hooks; isBareFromDirs for a third (`rev-parse --is-bare-repository`, run in the common dir) that lets the worktrees of a bare repository write them; and hooksPathIsPerWorktree for a fourth (`config --show-origin --get core.hooksPath`) that tells a per-worktree hooks dir from a shared one (mmnto-ai/totem#3122). Literal targets, fixed args, cwd anchored at the resolved git root or common dir; raw spawnSync (the doctor.ts idiom) because a static safeExec import would pull the core barrel into CLI cold-start.',
   },
   {
     hash: 'c2c09301bb56a02b',

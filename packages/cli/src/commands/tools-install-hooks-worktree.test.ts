@@ -164,6 +164,20 @@ describe('tools/install-hooks.js from a linked worktree (mmnto-ai/totem#3122)', 
     }
   });
 
+  it('a stale core.bare in config.worktree without extensions.worktreeConfig does not make a linked worktree write', () => {
+    plantScript(main, 'main');
+    expect(runScript(main).status).toBe(0);
+    // git ignores config.worktree unless the extension is on; so must the read.
+    fs.writeFileSync(path.join(main, '.git', 'config.worktree'), '[core]\n\tbare = true\n');
+    plantScript(linked, 'topic');
+
+    const run = runScript(linked);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('Linked worktree');
+    for (const hook of HOOKS) expect(installedHook(main, hook)).toContain(`main ${hook}`);
+  });
+
   it('a stray `bare = true` outside [core] does not make a linked worktree write', () => {
     plantScript(main, 'main');
     expect(runScript(main).status).toBe(0);
