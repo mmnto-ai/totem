@@ -218,7 +218,9 @@ export async function checkGitHooks(
   // An installer module that fails to load is reported by the sensor below as
   // 'unavailable' (mmnto-ai/totem#2701), so this read maps that one rejection to
   // "not a linked worktree" instead of pre-empting the sensor's report with its own
-  // throw; the predicate itself never throws.
+  // throw. The predicate asks git and reads the `.git` pointer file only when git
+  // fails; a pointer that exists but cannot be read is a broken repository and stays
+  // loud there (Tenet 4), as `resolveHooksDir` beside it does, so no catch wraps it.
   const installer = await import('./install-hooks.js').then(
     (module) => module,
     () => null,
