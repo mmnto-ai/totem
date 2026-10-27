@@ -1009,6 +1009,36 @@ describe('checkSecretLeaks', () => {
     const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
   });
+
+  it('does NOT flag an English hyphenation whose word ends in sk- (ask-, task-, risk-, desk-)', async () => {
+    const lessonsDir = path.join(tmpDir, '.totem', 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(lessonsDir, 'hyphenation-lesson.md'),
+      [
+        '# Lesson',
+        'The rule is ask-the-registered-lead-first-and-only-then-act.',
+        'A task-that-runs-longer-than-a-single-session needs a checkpoint.',
+        'The risk-of-a-silent-skip-at-push-time is the datum.',
+        'A desk-check-before-the-first-commit-of-the-day catches it.',
+      ].join('\n'),
+    );
+    const result = await checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toBe('No leaked keys detected');
+  });
+
+  it('still flags a key whose token starts at sk- after a quote, a bracket, an equals sign, an underscore or a digit', async () => {
+    const key = 'sk-abcdefghijklmnopqrstuvwxyz1234567890';
+    const cases = [`"${key}"`, `(${key})`, `OPENAI_API_KEY=${key}`, `KEY_${key}`, `v2${key}`];
+    for (const [i, text] of cases.entries()) {
+      const dir = path.join(tmpDir, `case-${i}`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'CLAUDE.md'), `Use this: ${text}`);
+      const result = await checkSecretLeaks(dir);
+      expect(result.status, text).toBe('fail');
+    }
+  });
 });
 
 // ─── Embedding config check ─────────────────────────────
