@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "d4014a9075796997d6fdcd1ca6abd5c807b48bfe",
+  "readAt": "2026-10-27T23:53:10Z",
+  "findings": [
+    {
+      "id": "3131-r1-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 94,
+      "claim": "The new lookbehind lets through a key glued to the letter that ends an escape or a percent-encoding (a literal backslash-n or backslash-t, a JSON unicode escape, a percent-encoded equals sign), which the old pattern caught, and neither the changeset nor the comment says so.",
+      "counterexample": "Measured through the same g-flag rebuild and placeholder filter as checkSecretLeaks (doctor.ts 1135-1139): old 1 match, new 0, for each of those five prefixes before the 39-character key; the sk-ant key gives old 2, new 0. A nested lookbehind that re-admits a letter after a backslash or a percent-hex pair catches four of the five and still misses the JSON unicode escape."
+    },
+    {
+      "id": "3131-r1-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 89,
+      "claim": "The comment says a letter, but the lookbehind covers ASCII letters only; a non-ASCII letter before sk- still matches on both sides, and the hyphenation test covers lowercase ASCII only.",
+      "counterexample": "Measured: e-acute, u-umlaut, a CJK character and n-acute before sk- match old and new alike; a Polish place name ending in nsk- followed by a long hyphenation matches both. Ask- at a sentence start is excluded by A-Z (measured) but was untested."
+    },
+    {
+      "id": "3131-r1-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 95,
+      "claim": "The sk-ant pattern changes no pass or fail outcome and counts an sk-ant key twice, before and after the change.",
+      "counterexample": "Measured on sk-ant, letter, underscore, digit and hyphen prefixes: the two new patterns agree in every case, and so do the two old ones; an sk-ant key yields two leaks on both sides because doctor.ts 1144 pushes once per pattern match."
+    },
+    {
+      "id": "3131-r1-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1361,
+      "claim": "The changeset names only the strict tier, but the rendered pre-push hook also runs doctor --strict for an agent seat, and a Secret Scan fail gates there.",
+      "counterexample": "install-hooks.ts 1360-1363 and this repository's tools/pre-push 150-153 guard on is_agent equal to 1 or TOTEM_HOOK_TIER equal to strict before doctor --strict; doctorGateFailed (doctor.ts 81-85) gates on any fail regardless of gateExempt."
+    },
+    {
+      "id": "3131-r1-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/sanitize.ts",
+      "line": 128,
+      "claim": "The other sk- scanners are separate contracts, not readers of SECRET_PATTERNS, and none disagrees with the fix in a way a user sees at push.",
+      "counterexample": "sanitize.ts 127-128 redacts with a word-boundary pattern that already refused ask- and also skips keys after an underscore or a digit, so doctor's boundary is now looser than sanitize's on those two cells; init.ts 1761 is an anchored check on typed input; config-drift.test.ts 487 is a test-local copy whose class has no hyphen and never matched the hyphenation class; compileCustomSecrets is untouched."
+    }
+  ],
+  "folded": [
+    "3131-r1-F1",
+    "3131-r1-F2",
+    "3131-r1-F4"
+  ],
+  "verdict": "Read 1 of the mmnto-ai/totem#3131 build at d4014a90 against 98f9d5e1: blocking=0 material=1 minor=4 question=0 folded=3 (counts as typed; the leg typed its four non-material findings info, recorded as MINOR, the schema's disclosed class). F1 folded as a disclosure in the release note and the comment, not as a nested lookbehind that still misses the JSON unicode escape; F2 and F4 folded as wording and one sentence-start test line; F3 and F5 need no change in this diff. Thirty differential cells measured, old against new, through the scan's own g-flag rebuild and placeholder filter; the hyphenation test fails on the old regex (four of four lines match), the still-caught test passes on both sides and pins the letters-only choice."
+}
