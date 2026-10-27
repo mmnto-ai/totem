@@ -1017,6 +1017,7 @@ describe('checkSecretLeaks', () => {
       path.join(lessonsDir, 'hyphenation-lesson.md'),
       [
         '# Lesson',
+        'Ask-the-registered-lead-first-and-only-then-act is the rule at a sentence start.',
         'The rule is ask-the-registered-lead-first-and-only-then-act.',
         'A task-that-runs-longer-than-a-single-session needs a checkpoint.',
         'The risk-of-a-silent-skip-at-push-time is the datum.',

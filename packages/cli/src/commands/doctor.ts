@@ -86,10 +86,13 @@ export function doctorGateFailed(results: readonly DiagnosticResult[], tier: Str
 
 // ─── Secret leak patterns ───────────────────────────────
 
-// A letter before `sk-` makes it the tail of an English word (ask-, task-, risk-, desk-), never
-// the start of a key, and a lessons corpus written in English keeps producing such hyphenations;
-// anything else before it (a quote, a bracket, `=`, `_`, a digit, the start of the line) can
-// precede a pasted key, so only a letter is excluded (mmnto-ai/totem#3131).
+// An ASCII letter before `sk-` makes it the tail of an English word (ask-, task-, risk-, desk-),
+// never the start of a key, and a lessons corpus written in English keeps producing such
+// hyphenations; anything else before it (a quote, a bracket, `=`, `_`, a digit, a non-ASCII
+// letter, the start of the line) can precede a pasted key, so only an ASCII letter is excluded.
+// The one key shape this lets through is a key glued to the letter that ends an escape or a
+// percent-encoding (a literal backslash-n, a JSON unicode escape, a percent-encoded equals
+// sign), disclosed in the release note (mmnto-ai/totem#3131).
 const SECRET_PATTERNS: RegExp[] = [
   /(?<![A-Za-z])sk-[a-zA-Z0-9_-]{20,}/,
   /(?<![A-Za-z])sk-ant-[a-zA-Z0-9_-]{20,}/,
