@@ -215,6 +215,43 @@ export async function checkGitHooks(
   } catch {
     hooksDir = path.join(gitRoot, '.git', 'hooks');
   }
+  // Since mmnto-ai/totem#3122 the shared hooks are the main worktree's to write. From
+  // a linked worktree of a non-bare repository this row judges hooks every worktree
+  // runs against THIS checkout's templates, and its remedies run from here would skip
+  // (a bare install) or write this checkout's templates for every worktree
+  // (`--force`), so the row says what it compared against and sends the remedy to
+  // the main worktree. A hooks dir no other worktree runs (read from git in each)
+  // is this worktree's own and reads as before.
+  // An installer module that fails to load is reported by the sensor below as
+  // 'unavailable' (mmnto-ai/totem#2701), so this read maps that one rejection to
+  // "not a linked worktree" instead of pre-empting the sensor's report with its own
+  // throw. The predicate asks git and reads the `.git` pointer file only when git
+  // fails; a pointer that exists but cannot be read is a broken repository and stays
+  // loud there (Tenet 4), as `resolveHooksDir` beside it does, so no catch wraps it.
+  const installer = await import('./install-hooks.js').then(
+    (module) => module,
+    () => null,
+  );
+  const judgment = installer === null ? null : installer.sharedHooksJudgment(gitRoot, hooksDir);
+  const ownedByMainWorktree = judgment !== null && judgment.ownedByMainWorktree;
+  // When the dir counts as shared only because a sibling could not answer, or git
+  // could not list the worktrees, the row says so: the remedy is to fix that sibling.
+  const unansweredNote =
+    judgment === null || !judgment.ownedByMainWorktree || judgment.runs
+      ? ''
+      : !judgment.listed
+        ? '; shared because git could not list the worktrees of this repository'
+        : judgment.unanswered.length > 0
+          ? `; shared because ${judgment.unanswered.length} worktree(s) could not say which hooks directory they run: ${judgment.unanswered.join(', ')}`
+          : '';
+  // The redirect LEADS the remedy, so the first thing a reader copies is the safe
+  // instruction and the command that would revert the shared hooks comes after it.
+  const fromMainWorktree = ownedByMainWorktree
+    ? "From this linked worktree, run the remedy from the main worktree — the hooks are shared by every worktree of the repository, a bare install from here skips them, and `--force` from here writes THIS checkout's templates for all of them (mmnto-ai/totem#3122). The remedy there: "
+    : '';
+  const judgedHere = ownedByMainWorktree
+    ? ` (judged against this checkout's templates; the main worktree's may be newer${unansweredNote})`
+    : '';
   const markers: { file: string; marker: string }[] = [
     { file: 'pre-commit', marker: '[totem] pre-commit hook' },
     { file: 'pre-push', marker: '[totem] pre-push hook' },
@@ -249,9 +286,8 @@ export async function checkGitHooks(
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${sensed.totemDir}': ${sensed.failure}`,
-        remediation:
-          'totem hook install --force (re-renders the four hooks from the current config)',
+        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${sensed.totemDir}': ${sensed.failure}${judgedHere}`,
+        remediation: `${fromMainWorktree}totem hook install --force (re-renders the four hooks from the current config)`,
       };
     }
     const stale = sensed.stale;
@@ -332,6 +368,7 @@ export async function checkGitHooks(
         );
       }
       const remediation =
+        fromMainWorktree +
         clauses.join('; ') +
         (appended.length > 0
           ? ' — `--force` rewrites the whole file and would overwrite your own hook content'
@@ -355,14 +392,14 @@ export async function checkGitHooks(
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message,
+        message: message + judgedHere,
         remediation,
       };
     }
     return {
       name: 'Git Hooks',
       status: 'pass',
-      message: `All ${markers.length} hooks installed`,
+      message: `All ${markers.length} hooks installed${judgedHere}`,
     };
   }
 
@@ -370,7 +407,7 @@ export async function checkGitHooks(
     name: 'Git Hooks',
     status: 'warn',
     message: `${installed}/${markers.length} hooks installed (missing: ${missing.join(', ')})`,
-    remediation: 'totem hooks',
+    remediation: `${fromMainWorktree}totem hooks`,
   };
 }
 

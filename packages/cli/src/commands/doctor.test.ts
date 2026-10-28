@@ -236,6 +236,133 @@ describe('checkGitHooks', () => {
     }
   });
 
+  // mmnto-ai/totem#3122: the shared hooks are the main worktree's to write. From a
+  // linked worktree the row judges hooks every worktree runs against THIS checkout's
+  // templates, and a remedy run from here would skip (bare) or write this checkout's
+  // templates for all of them (`--force`) — so the row sends the remedy to the main
+  // worktree and says what it compared against. From the main worktree, unchanged.
+  it('from a linked worktree, the missing and stale remedies are sent to the main worktree', async () => {
+    const tmpDir = makeTmpDir();
+    try {
+      const main = path.join(tmpDir, 'main');
+      fs.mkdirSync(main, { recursive: true });
+      execSync('git init', { cwd: main, stdio: 'ignore' });
+      execSync(
+        'git -c user.name=totem -c user.email=totem@test.invalid commit --allow-empty -m init',
+        { cwd: main, stdio: 'ignore' },
+      );
+      const linked = path.join(tmpDir, 'linked');
+      spawnSync('git', ['worktree', 'add', linked], { cwd: main, stdio: 'ignore' });
+
+      const missing = await checkGitHooks(linked);
+      expect(missing.status).toBe('warn');
+      expect(missing.remediation).toContain('totem hooks');
+      // The redirect LEADS: the first thing a reader copies is the safe instruction.
+      expect(
+        missing.remediation!.startsWith(
+          'From this linked worktree, run the remedy from the main worktree',
+        ),
+      ).toBe(true);
+
+      // Stale shared hooks, as an older worktree's install leaves them.
+      const hooksDir = path.join(main, '.git', 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      for (const [file, marker] of [
+        ['pre-commit', '[totem] pre-commit hook'],
+        ['pre-push', '[totem] pre-push hook'],
+        ['post-merge', '[totem] post-merge hook'],
+        ['post-checkout', '[totem] post-checkout hook'],
+      ]) {
+        fs.writeFileSync(path.join(hooksDir, file), `#!/bin/sh\n# ${marker}\necho ok`);
+      }
+      const stale = await checkGitHooks(linked);
+      expect(stale.status).toBe('warn');
+      expect(stale.message).toContain("judged against this checkout's templates");
+      expect(
+        stale.remediation!.startsWith(
+          'From this linked worktree, run the remedy from the main worktree',
+        ),
+      ).toBe(true);
+      expect(stale.remediation).toContain('`--force` from here writes THIS checkout');
+      // The reverting command sits after the redirect, never before it.
+      expect(stale.remediation!.indexOf('The remedy there: ')).toBeLessThan(
+        stale.remediation!.indexOf('totem hook install --force'),
+      );
+
+      const fromMain = await checkGitHooks(main);
+      expect(fromMain.status).toBe('warn');
+      expect(fromMain.remediation).not.toContain('main worktree');
+      expect(fromMain.message).not.toContain('judged against');
+
+      // A PASS from the linked worktree names the same baseline, so the two results
+      // from one checkout never name different ones; from the main worktree, unchanged.
+      await installCanonical(main, '.totem');
+      const pass = await checkGitHooks(linked);
+      expect(pass.status).toBe('pass');
+      expect(pass.message).toContain("judged against this checkout's templates");
+      expect((await checkGitHooks(main)).message).toBe('All 4 hooks installed');
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
+
+  // The fourth arm from a linked worktree: the hooks are installed but the sensor
+  // cannot compare them (a builder threw), so the row says what it would have judged
+  // against and still sends the remedy to the main worktree. The installer module
+  // itself loads here (only one builder throws), so the predicate runs and the
+  // linked-worktree clauses are the ones under test.
+  it('from a linked worktree, the could-not-compare warn names the baseline and sends the remedy to the main worktree', async () => {
+    const tmpDir = makeTmpDir();
+    try {
+      const main = path.join(tmpDir, 'main');
+      fs.mkdirSync(main, { recursive: true });
+      execSync('git init', { cwd: main, stdio: 'ignore' });
+      execSync(
+        'git -c user.name=totem -c user.email=totem@test.invalid commit --allow-empty -m init',
+        { cwd: main, stdio: 'ignore' },
+      );
+      const linked = path.join(tmpDir, 'linked');
+      spawnSync('git', ['worktree', 'add', linked], { cwd: main, stdio: 'ignore' });
+      await installCanonical(main, '.totem');
+
+      vi.resetModules();
+      vi.doMock('./install-hooks.js', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('./install-hooks.js')>();
+        return {
+          ...actual,
+          buildPreCommitHook: () => {
+            throw new Error('boom: pre-commit builder');
+          },
+        };
+      });
+      const { checkGitHooks: freshCheckGitHooks } = await import('./doctor.js');
+
+      const fromLinked = await freshCheckGitHooks(linked, {});
+      expect(fromLinked.status).toBe('warn');
+      expect(fromLinked.message).toContain('could not be compared');
+      expect(fromLinked.message).toContain('boom: pre-commit builder');
+      expect(fromLinked.message).toContain("judged against this checkout's templates");
+      expect(
+        fromLinked.remediation!.startsWith(
+          'From this linked worktree, run the remedy from the main worktree',
+        ),
+      ).toBe(true);
+      expect(fromLinked.remediation!.indexOf('The remedy there: ')).toBeLessThan(
+        fromLinked.remediation!.indexOf('totem hook install --force'),
+      );
+
+      const fromMain = await freshCheckGitHooks(main, {});
+      expect(fromMain.status).toBe('warn');
+      expect(fromMain.message).toContain('could not be compared');
+      expect(fromMain.message).not.toContain('judged against');
+      expect(fromMain.remediation!.startsWith('totem hook install --force')).toBe(true);
+    } finally {
+      vi.doUnmock('./install-hooks.js');
+      vi.resetModules();
+      cleanTmpDir(tmpDir);
+    }
+  });
+
   // mmnto-ai/totem#2753: presence was never the question the row is asked. Until
   // this slice the marker alone passed on the default totemDir, so a hook frozen at
   // an older template read as healthy (`All 4 hooks installed` over two 1.121.0

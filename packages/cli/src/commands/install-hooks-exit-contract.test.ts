@@ -570,34 +570,62 @@ describe('hooksCommand in a linked worktree (mmnto-ai/totem#2418)', () => {
     expect(fs.realpathSync.native(resolved!)).toBe(fs.realpathSync.native(sharedHooksDir()));
   });
 
-  it('exit 0: install from the worktree lands in the shared hooks dir (no ENOTDIR)', async () => {
+  // Since mmnto-ai/totem#3122 the shared hooks are the main worktree's to write: a bare
+  // install from a linked worktree skips them with the owner line (still exit 0, still
+  // no ENOTDIR), and `--force` is the one way to land them from here.
+  it('exit 0: a bare install from the worktree skips the shared hooks with the owner line (no ENOTDIR); --force lands them', async () => {
     await expect(hooksCommand({})).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errorOutput()).toContain('linked worktree');
+    for (const hook of ['pre-commit', 'pre-push', 'post-merge', 'post-checkout']) {
+      expect(
+        fs.existsSync(path.join(sharedHooksDir(), hook)),
+        `${hook} written to the shared hooks dir from the worktree without --force`,
+      ).toBe(false);
+    }
+    // The pointer file survives untouched — nothing tried to mkdir through it.
+    expect(fs.statSync(path.join(wtDir, '.git')).isFile()).toBe(true);
+
+    await expect(hooksCommand({ force: true })).resolves.toBeUndefined();
     expect(exitSpy).not.toHaveBeenCalled();
     for (const hook of ['pre-commit', 'pre-push', 'post-merge', 'post-checkout']) {
       expect(
         fs.existsSync(path.join(sharedHooksDir(), hook)),
-        `${hook} missing from the shared hooks dir`,
+        `${hook} missing from the shared hooks dir after --force`,
       ).toBe(true);
     }
-    // The pointer file survives untouched — nothing tried to mkdir through it.
-    expect(fs.statSync(path.join(wtDir, '.git')).isFile()).toBe(true);
   });
 
-  it('--check from the worktree sees the shared hooks (exit 0)', async () => {
-    await hooksCommand({});
+  it('--check from the worktree sees the shared hooks once --force installed them (exit 0)', async () => {
+    await hooksCommand({ force: true });
     errorSpy.mockClear();
     await expect(hooksCommand({ check: true })).resolves.toBeUndefined();
     expect(exitSpy).not.toHaveBeenCalled();
     expect(errorOutput()).toContain('All hooks installed');
   });
 
-  it('installHooksNonInteractive from the worktree classifies all four hooks', async () => {
-    const result = await installHooksNonInteractive(wtDir);
+  it('installHooksNonInteractive from the worktree returns null bare and classifies all four hooks with force', async () => {
+    expect(await installHooksNonInteractive(wtDir)).toBeNull();
+    const result = await installHooksNonInteractive(wtDir, true);
     expect(result).not.toBeNull();
     expect(result!.preCommit).toBe('installed');
     expect(result!.prePush).toBe('installed');
     expect(result!.postMerge).toBe('installed');
     expect(result!.postCheckout).toBe('installed');
+  });
+
+  it('the per-checkout session hooks are still regenerated after the skipped install', async () => {
+    // The skip returns null the way the hook-manager branch does, and hooksCommand must
+    // not early-return on it: the managed session hooks live in THIS checkout.
+    const sessionHook = path.join(wtDir, '.claude', 'hooks', 'SessionStart.cjs');
+    fs.mkdirSync(path.dirname(sessionHook), { recursive: true });
+    fs.writeFileSync(sessionHook, `${TOTEM_FILE_MARKER}\nstale body\n${TOTEM_FILE_END}\n`, 'utf-8');
+
+    await expect(hooksCommand({})).resolves.toBeUndefined();
+
+    expect(errorOutput()).toContain('linked worktree');
+    expect(fs.readFileSync(sessionHook, 'utf-8')).toBe(CLAUDE_SESSION_START);
+    expect(fs.existsSync(path.join(sharedHooksDir(), 'pre-push'))).toBe(false);
   });
 });
 

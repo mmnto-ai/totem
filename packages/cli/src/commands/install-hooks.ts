@@ -77,9 +77,345 @@ export function resolveHooksDir(gitRoot: string): string | null {
   return null;
 }
 
+/**
+ * The checkout's git dir and the repository's common dir, both absolute
+ * (mmnto-ai/totem#3122). Read from git's own answer (`rev-parse --git-dir
+ * --git-common-dir`, the same builtin idiom as the resolver above); the
+ * offline fallback follows a `gitdir:` pointer file and the `commondir` file
+ * at its target, and a plain `.git` directory is its own common dir. Null when
+ * neither read resolves.
+ */
+function resolveGitDirs(gitRoot: string): { gitDir: string; commonDir: string } | null {
+  const resolved = spawnSync('git', ['rev-parse', '--git-dir', '--git-common-dir'], {
+    cwd: gitRoot,
+    encoding: 'utf-8',
+  });
+  if (resolved.status === 0 && resolved.stdout) {
+    const [gitDir, commonDir] = resolved.stdout.trim().split(/\r?\n/);
+    if (gitDir && commonDir) {
+      return {
+        gitDir: path.resolve(gitRoot, path.normalize(gitDir)),
+        commonDir: path.resolve(gitRoot, path.normalize(commonDir)),
+      };
+    }
+  }
+  // The offline walk reads existence, never catches: an unreadable file is a
+  // real failure and stays loud (Tenet 4), as in `resolveHooksDir` above.
+  const gitPath = path.join(gitRoot, '.git');
+  if (!fs.existsSync(gitPath)) return null;
+  if (fs.statSync(gitPath).isDirectory()) return { gitDir: gitPath, commonDir: gitPath };
+  const match = /^gitdir:\s*(.+)$/.exec(fs.readFileSync(gitPath, 'utf-8').trim());
+  if (!match) return null;
+  const gitDir = path.resolve(gitRoot, match[1]!.trim());
+  const commonDirFile = path.join(gitDir, 'commondir');
+  if (!fs.existsSync(commonDirFile)) return { gitDir, commonDir: gitDir };
+  const commonDir = fs.readFileSync(commonDirFile, 'utf-8').trim();
+  return { gitDir, commonDir: path.resolve(gitDir, commonDir) };
+}
+
+type GitDirs = { gitDir: string; commonDir: string };
+
+function isLinkedFromDirs(dirs: GitDirs): boolean {
+  return dirs.gitDir !== dirs.commonDir;
+}
+
+/**
+ * Whether `gitRoot` is a LINKED worktree: a checkout whose git dir differs from
+ * the repository's common dir, so the hooks dir {@link resolveHooksDir} returns
+ * is, unless `core.hooksPath` gives this worktree a directory no other worktree
+ * runs, the one EVERY worktree runs (mmnto-ai/totem#3122). A submodule has a pointer file but equal dirs and
+ * no `commondir`, so it reads false, as does a plain checkout.
+ */
+export function isLinkedWorktree(gitRoot: string): boolean {
+  const dirs = resolveGitDirs(gitRoot);
+  return dirs !== null && isLinkedFromDirs(dirs);
+}
+
+/**
+ * Whether a git config text sets the boolean `section.key` true, read the way git
+ * reads it: under `[section]` only, the last occurrence winning, a bare key or a
+ * value in any boolean spelling git accepts (`true`, `yes`, `on`, `1`,
+ * case-insensitive), a quoted value unquoted, a trailing `#` or `;` comment
+ * dropped. An `include` directive is not followed; the git reads above are the
+ * primary and this the fallback.
+ */
+function configBool(text: string, section: string, key: string): boolean {
+  const sectionLine = new RegExp(`^\\[${section}\\]`, 'i');
+  const keyLine = new RegExp(`^${key}\\s*(?:=\\s*(.*))?$`, 'i');
+  let inSection = false;
+  let bare = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith('[')) {
+      inSection = sectionLine.test(line);
+      continue;
+    }
+    if (!inSection) continue;
+    const match = keyLine.exec(line);
+    if (!match) continue;
+    const rest = match[1];
+    const quoted = rest === undefined ? null : /^"([^"]*)"/.exec(rest);
+    const value =
+      rest === undefined ? 'true' : quoted ? quoted[1]! : rest.replace(/\s*[#;].*$/, '').trim();
+    bare = /^(?:true|yes|on|1)$/i.test(value);
+  }
+  return bare;
+}
+
+const configSaysBare = (text: string): boolean => configBool(text, 'core', 'bare');
+/** git reads `config.worktree` only when `config` turns this extension on. */
+const configEnablesWorktreeConfig = (text: string): boolean =>
+  configBool(text, 'extensions', 'worktreeConfig');
+
+function isBareFromDirs(dirs: GitDirs): boolean {
+  // git's own answer, asked IN the common dir: it reads core.bare wherever git
+  // keeps it — `config`, or the main worktree's `config.worktree` once
+  // extensions.worktreeConfig is on (`git sparse-checkout` turns it on and moves
+  // the flag there), where a read of `config` alone comes up empty. The read is
+  // about the COMMON dir, not this worktree, so it carries the env scrubbed of
+  // git's location variables: in a hook, `GIT_DIR` names the worktree and would
+  // make this answer "false" for a bare repository's worktree.
+  const asked = spawnSync('git', ['rev-parse', '--is-bare-repository'], {
+    cwd: dirs.commonDir,
+    encoding: 'utf-8',
+    env: envForAnotherWorktree(),
+  });
+  if (asked.status === 0 && asked.stdout) return asked.stdout.trim() === 'true';
+  // When that read fails: `config`, and `config.worktree` only when `config` turns
+  // the extension on, as git itself reads it (a stale flag there is otherwise inert).
+  const configPath = path.join(dirs.commonDir, 'config');
+  const config = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : '';
+  if (configSaysBare(config)) return true;
+  if (!configEnablesWorktreeConfig(config)) return false;
+  const worktreeConfigPath = path.join(dirs.commonDir, 'config.worktree');
+  return (
+    fs.existsSync(worktreeConfigPath) &&
+    configSaysBare(fs.readFileSync(worktreeConfigPath, 'utf-8'))
+  );
+}
+
+/**
+ * `target`'s real path, resolving its nearest existing ancestor and keeping the
+ * rest of the path verbatim, so a hooks dir that does not exist yet still compares
+ * by where it would be created and a link inside a worktree to the shared hooks
+ * dir compares by where it points.
+ */
+function realpathNearest(target: string): string {
+  const tail: string[] = [];
+  let probe = target;
+  while (!fs.existsSync(probe)) {
+    const parent = path.dirname(probe);
+    if (parent === probe) return target;
+    tail.unshift(path.basename(probe));
+    probe = parent;
+  }
+  return path.join(fs.realpathSync.native(probe), ...tail);
+}
+
+/**
+ * Git's repository-location variables. Git exports them into every hook it runs,
+ * so from a linked worktree a hook (the pre-push's `doctor --strict` reads this
+ * module's predicate) carries `GIT_DIR` naming THIS worktree, and a read meant to
+ * describe ANOTHER worktree would describe this one instead: the other worktree's
+ * `rev-parse` would answer with this worktree's hooks dir. A copy of core's
+ * `GIT_LOCATION_ENV_VARS` (mmnto-ai/totem#2801), kept here because this module
+ * keeps the core barrel off the CLI's cold start; the test beside this file holds
+ * the two scrubs equal. The reads about THIS worktree keep the inherited env,
+ * which names it correctly.
+ */
+const GIT_LOCATION_ENV_VARS = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CEILING_DIRECTORIES',
+] as const;
+
+/** `env` with {@link GIT_LOCATION_ENV_VARS} removed, for a read about another worktree. */
+export function envForAnotherWorktree(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const scrubbed: NodeJS.ProcessEnv = { ...env };
+  for (const name of GIT_LOCATION_ENV_VARS) delete scrubbed[name];
+  return scrubbed;
+}
+
+/**
+ * The worktree roots in a `git worktree list --porcelain` output, exact. With `-z`
+ * (git 2.36 and newer) every attribute ends in NUL, so a root ending in a space
+ * survives; the line form of an older git (Ubuntu 22.04 ships 2.34) ends attributes
+ * in a newline, so only the line ending is dropped, never a trailing space, and only
+ * a newline inside a path is lost. The bare, locked, prunable and HEAD attributes
+ * are not roots and are ignored. Exported for its own test.
+ */
+export function parseWorktreeRoots(stdout: string, separator: '\0' | '\n'): string[] {
+  const roots: string[] = [];
+  for (const raw of stdout.split(separator)) {
+    const attribute = separator === '\n' && raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    if (!attribute.startsWith('worktree ')) continue;
+    const root = attribute.slice('worktree '.length);
+    if (root !== '') roots.push(root);
+  }
+  return roots;
+}
+
+/**
+ * The roots of the other worktrees of the repository `gitRoot` belongs to, as git
+ * lists them (`worktree list --porcelain -z`, the main worktree first; when this git
+ * does not know `-z`, the line form, which keeps a trailing space too). `gitRoot`
+ * itself is left out by real path; a bare entry has no root to run hooks from and
+ * carries no `worktree` line to begin with. `null` when git cannot list them for
+ * any reason but the missing flag: the caller treats a repository whose worktrees
+ * it cannot see as one it cannot clear for a write.
+ */
+function otherWorktreeRoots(gitRoot: string): string[] | null {
+  const list = (args: string[]) =>
+    spawnSync('git', ['worktree', 'list', '--porcelain', ...args], {
+      cwd: gitRoot,
+      encoding: 'utf-8',
+      env: envForAnotherWorktree(),
+    });
+  let listed = list(['-z']);
+  let separator: '\0' | '\n' = '\0';
+  // git 2.35 and older reject `-z` here with "unknown option" and the usage text,
+  // exit 129; that one failure means "ask the older way", every other one is real.
+  if (listed.status !== 0 && /unknown option/i.test(listed.stderr ?? '')) {
+    listed = list([]);
+    separator = '\n';
+  }
+  if (listed.status !== 0 || typeof listed.stdout !== 'string') return null;
+  const self = realpathNearest(gitRoot);
+  return parseWorktreeRoots(listed.stdout, separator).filter(
+    (root) => realpathNearest(root) !== self,
+  );
+}
+
+/**
+ * Whether another worktree of the repository runs the hooks directory `hooksDir`:
+ * git's own answer from each other worktree's root (`rev-parse --git-path hooks`,
+ * which honors that worktree's `core.hooksPath`, shared or per-worktree, relative
+ * or absolute), compared by real location. This is the one test that tells a
+ * shared hooks directory from a worktree's own without modelling how git resolves
+ * the value. A relative `core.hooksPath` in the shared config is per worktree in
+ * general and shared when sibling worktrees resolve it to one directory
+ * (`../hooks` beside `/repo/main` and `/repo/topic`); an absolute one is shared
+ * wherever it lies for as long as another worktree runs it (every worktree that
+ * does not override it in its own `config.worktree`); one set in this worktree's
+ * own `config.worktree` is its own unless it names a directory another worktree
+ * also runs; a link to a shared directory compares by where it points. A worktree
+ * git lists whose directory is missing (pruned, or a locked checkout on unmounted
+ * media) runs nothing and is skipped; one whose directory exists but which cannot
+ * say which hooks directory it runs (a broken `config.worktree` there) is returned
+ * as UNANSWERED, and the caller counts the directory as shared while it stands,
+ * since a broken sibling must never clear a write (Tenet 4). Each read carries the
+ * env scrubbed of git's location variables, so a hook context never makes the other
+ * worktree answer for this one.
+ */
+interface OtherWorktreesVerdict {
+  /** Another worktree resolves its hooks to `hooksDir`. */
+  runs: boolean;
+  /** Listed roots whose directory exists but which could not answer; never one whose directory is missing. */
+  unanswered: string[];
+  /** Whether git could list the worktrees at all; `false` is never cleared for a write. */
+  listed: boolean;
+}
+
+function otherWorktreesRunningHooksDir(gitRoot: string, hooksDir: string): OtherWorktreesVerdict {
+  const roots = otherWorktreeRoots(gitRoot);
+  if (roots === null) return { runs: false, unanswered: [], listed: false };
+  const target = realpathNearest(hooksDir);
+  const unanswered: string[] = [];
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    const asked = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
+      cwd: root,
+      encoding: 'utf-8',
+      env: envForAnotherWorktree(),
+    });
+    if (asked.status !== 0 || !asked.stdout || !asked.stdout.trim()) {
+      unanswered.push(root);
+      continue;
+    }
+    if (realpathNearest(path.resolve(root, asked.stdout.trim())) === target) {
+      return { runs: true, unanswered, listed: true };
+    }
+  }
+  return { runs: false, unanswered, listed: true };
+}
+
+/**
+ * Whether the hooks dir `hooksDir` resolved for `gitRoot` is the main worktree's to
+ * write: `gitRoot` is a linked worktree of a non-bare repository and the dir is one
+ * every worktree runs (mmnto-ai/totem#3122). The one truth the installer's skip and
+ * the doctor row's remedy both read; the dirs resolve once. A shared hooks dir is
+ * the common one (by real location, so a link to it stays shared), or any directory
+ * another worktree of the repository resolves its hooks to, read from git in that
+ * worktree, or one no listed worktree could be cleared of running (a sibling whose
+ * directory exists but cannot answer, or a repository whose worktrees git cannot
+ * list), the conservative direction; the worktree's own hooks dir, which it may
+ * write, is one every other worktree was asked about and none runs. A bare
+ * repository has no main worktree to own anything.
+ */
+export interface SharedHooksJudgment {
+  /** The hooks dir is shared and the main worktree's to write. */
+  ownedByMainWorktree: boolean;
+  /**
+   * The sharing is CONFIRMED: the dir is the common one, or another worktree answered
+   * that it runs it. When true, `unanswered` and `listed` explain nothing about the
+   * verdict and a caller's explanation names the confirmed sharing, not the siblings
+   * that could not answer (the lane's slice read on the round-4 fold).
+   */
+  runs: boolean;
+  /** Other worktrees that exist but could not say which hooks dir they run; the dir counts as shared while they stand. */
+  unanswered: string[];
+  /** Whether git could list the worktrees; `false` counts as shared too. */
+  listed: boolean;
+}
+
+export function sharedHooksJudgment(gitRoot: string, hooksDir: string): SharedHooksJudgment {
+  const dirs = resolveGitDirs(gitRoot);
+  if (dirs === null || !isLinkedFromDirs(dirs) || isBareFromDirs(dirs)) {
+    return { ownedByMainWorktree: false, runs: false, unanswered: [], listed: true };
+  }
+  if (realpathNearest(hooksDir) === realpathNearest(path.join(dirs.commonDir, 'hooks'))) {
+    return { ownedByMainWorktree: true, runs: true, unanswered: [], listed: true };
+  }
+  const others = otherWorktreesRunningHooksDir(gitRoot, hooksDir);
+  return {
+    ownedByMainWorktree: others.runs || others.unanswered.length > 0 || !others.listed,
+    runs: others.runs,
+    unanswered: others.unanswered,
+    listed: others.listed,
+  };
+}
+
+export function sharedHooksOwnedByMainWorktree(gitRoot: string, hooksDir: string): boolean {
+  return sharedHooksJudgment(gitRoot, hooksDir).ownedByMainWorktree;
+}
+
+/**
+ * Whether the repository `gitRoot` belongs to is BARE: a `.git` with no main
+ * working tree, the layout of a developer who keeps one worktree per branch.
+ * Every checkout of such a repository is a linked worktree, and nothing else
+ * exists to own the shared hooks, so a linked worktree of a bare repository
+ * writes them (mmnto-ai/totem#3122). Read from git in the common dir, with the
+ * two config files as the fallback.
+ */
+export function commonRepositoryIsBare(gitRoot: string): boolean {
+  const dirs = resolveGitDirs(gitRoot);
+  return dirs !== null && isBareFromDirs(dirs);
+}
+
 /** Skip line shared by every caller that hits an unresolvable hooks directory. */
 const HOOKS_DIR_UNRESOLVED_MSG =
   '[Totem] .git is not a directory or a resolvable gitdir pointer — skipping git hook installation.';
+
+/**
+ * Skip line for a linked worktree: the shared hooks are the main worktree's to
+ * write; `--force` is the one way to write them from a worktree (mmnto-ai/totem#3122).
+ */
+const HOOKS_SHARED_WORKTREE_MSG =
+  '[Totem] This checkout is a linked worktree: git hooks are shared by every worktree of the repository and the main worktree owns them — skipping the write. Run `totem hook install` from the main worktree (a bare install there keeps attested extensions), or `--force` here to write them from this branch, which rewrites each shared hook whole, trailers included.';
 
 /**
  * Whether `err` (typically the TotemGitError thrown by `resolveGitRoot`) stems
@@ -2078,6 +2414,34 @@ export async function installHooksNonInteractive(
     // the #2410 declared-skip class: report and exit 0, never mkdir '.git/hooks'
     // blind (the mmnto-ai/totem#2418 ENOTDIR crash).
     console.error(HOOKS_DIR_UNRESOLVED_MSG);
+    return null;
+  }
+
+  // A linked worktree resolves the SHARED hooks dir: writing it from here installs
+  // this branch's templates for every worktree of the repository and silently
+  // reverts a newer main worktree's hooks (mmnto-ai/totem#3122). The main worktree
+  // owns them; `--force` is the one way to write from a worktree. Two shapes write
+  // anyway: a hooks dir no other worktree of the repository runs (read from git in
+  // each, so a relative or per-worktree `core.hooksPath` is this worktree's own
+  // only while no other worktree resolves to the same directory), and a BARE
+  // repository, which has no main worktree to own them. The dirs resolve once for both checks. The
+  // session hooks the caller regenerates after this are per-checkout and unaffected.
+  const judgment = force ? null : sharedHooksJudgment(gitRoot, hooksDir);
+  if (judgment !== null && judgment.ownedByMainWorktree) {
+    console.error(HOOKS_SHARED_WORKTREE_MSG);
+    // The conservative arms say why no write was cleared, naming what stood in the
+    // way; when the sharing is confirmed, the standard line above is the whole reason.
+    if (judgment.runs) {
+      // confirmed: nothing to add
+    } else if (!judgment.listed) {
+      console.error(
+        '[Totem] git could not list the worktrees of this repository, so no worktree could be cleared of running this hooks directory; it is left alone. Run `git worktree list` here to see why, or `--force`.',
+      );
+    } else if (judgment.unanswered.length > 0) {
+      console.error(
+        `[Totem] ${judgment.unanswered.length} worktree(s) git lists could not say which hooks directory they run (${judgment.unanswered.join(', ')}), so this one counts as shared and is left alone. Fix or prune them, or \`--force\`.`,
+      );
+    }
     return null;
   }
 

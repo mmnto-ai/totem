@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "eeca7d0f9e6dcd1e3c9aef6eb6dff4b97558076d",
+  "readAt": "2026-10-28T00:39:16Z",
+  "findings": [
+    {
+      "id": "3124-r3-F1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 250,
+      "claim": "The two cross-worktree reads inherit git's location variables, and git exports GIT_DIR (this worktree's gitdir) into every hook it runs from a linked worktree, so in hook context every other worktree's rev-parse answers for THIS worktree: a hooks dir set in this worktree's own config.worktree is judged shared and skips, and a dir the main worktree runs through its config.worktree is written; the pre-push runs doctor --strict in that context.",
+      "counterexample": "Measured in a throwaway repository whose hooks printed their env: GIT_DIR is exported into pre-commit, pre-push and post-checkout from a linked worktree and empty from the main one. With GIT_DIR set as in such a hook, the cell config.worktree-absolute-outside goes from write to skip (main's rev-parse printed this worktree's path) and the converse cell (main's config.worktree aiming inside this worktree) goes from skip to write. Round 2 read only this worktree's config, which GIT_DIR names correctly, so the regression is new in this fold. The repository's guard for exactly this read class is envWithoutGitLocation in packages/core/src/sys/git.ts (mmnto-ai/totem#2801), already used by doctor.ts."
+    },
+    {
+      "id": "3124-r3-F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/hook-install-linked-worktree.md",
+      "line": 5,
+      "claim": "The sentence that an absolute core.hooksPath in the shared config is shared wherever it lies is contradicted by a measured cell: when every other worktree overrides its hooks dir in its own config.worktree, the code writes the absolute dir, correctly, since no other worktree runs it; the changeset, the wiki and the predicate's JSDoc all claim more than the code does.",
+      "counterexample": "Measured: extensions.worktreeConfig on, main sets core.hooksPath .mh in its config.worktree, the shared config sets an absolute dir; from linked, round 2 skips and round 3 writes. The round-3 behavior is right and undisclosed, and the old absolute-in-shared-config cell changes verdict under that override."
+    },
+    {
+      "id": "3124-r3-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 245,
+      "claim": "The JSDoc says a locked checkout runs nothing and is skipped; a locked worktree whose directory exists is answered and counted, and only one whose directory is missing is skipped.",
+      "counterexample": "Measured: a locked worktree with its directory present that shares a config.worktree dir with linked gives skip (round 2 gave write); the same worktree with its directory renamed away is skipped via ENOENT and the verdict is write, the portable-media edge the lock exists for; prunable entries are skipped via ENOENT, the safe direction."
+    },
+    {
+      "id": "3124-r3-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 2307,
+      "claim": "Two comments outside the fold's hunks and one in doctor.ts still state the round-2 rule (a hooks dir inside this worktree, or a relative or per-worktree core.hooksPath, is the worktree's own).",
+      "counterexample": "install-hooks.ts 2306-2308 and 125, doctor.ts 216. Measured against round 3: a dir inside this worktree that main also runs skips (main config.worktree aiming at linked/.githooks: round 2 write, round 3 skip), and a dir outside this worktree that only it runs writes (non-sibling ../hooks)."
+    },
+    {
+      "id": "3124-r3-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 275,
+      "claim": "The common-dir short-circuit skips a dir only this worktree runs when every other worktree overrides its hooks dir, unchanged from round 2 and the conservative direction, but the changeset's sentence that a dir no other worktree runs is the worktree's own does not hold for it.",
+      "counterexample": "Measured: main sets core.hooksPath .mh in its config.worktree; linked resolves the common hooks dir; round 2 skip, round 3 skip; only linked runs that directory."
+    },
+    {
+      "id": "3124-r3-F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 218,
+      "claim": "The cost of the enumeration, measured.",
+      "counterexample": "On the resident checkout the listing gives 7 worktrees, 6 others, all answering; listing plus 6 rev-parse took 135 ms. From the reviewed worktree the predicate takes the common match (the absolute core.hooksPath spelled with a lower-case segment resolves through realpathSync.native to the common hooks dir), so no enumeration runs: 44 ms for the whole predicate."
+    },
+    {
+      "id": "3124-r3-F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 1888,
+      "claim": "The new row's failure on round 2 was shown by the leg with a reimplementation of the round-2 predicate, not by running vitest against the old source.",
+      "counterexample": "A JS copy of the f0dd36ac predicate returns write for ../hooks in the initRepoWithWorktree sibling layout, so toBeNull and the no-file assertion would fail; the seat had already run the row against the f0dd36ac source swapped into the worktree before the fold commit: 1 failed, the expected result."
+    }
+  ],
+  "folded": [
+    "3124-r3-F1",
+    "3124-r3-F2",
+    "3124-r3-F3",
+    "3124-r3-F4",
+    "3124-r3-F5",
+    "3124-r3-F7"
+  ],
+  "verdict": "Read 2 of the mmnto-ai/totem#3122 build, scoped to the round-3 fold f0dd36ac..eeca7d0f: blocking=1 material=1 minor=5 question=0 folded=6 (counts as typed; the leg typed its five non-material findings info, recorded as MINOR, the schema's disclosed class). F1 (the cross-worktree reads inherit GIT_DIR in hook context, so every other worktree answers for this one) is a regression this fold minted, measured, and is folded by stripping git's location variables from both new spawns with a row that sets GIT_DIR as a hook does; F2 (the absolute-in-shared-config sentence claims more than the code) is folded in the changeset, the wiki and the JSDoc; F3, F4 and F5 are folded as comment and release-note wording; F6 is the measured cost, no change; F7 is answered by the seat's own red run of the row against the f0dd36ac source. Twenty-eight differential cells measured, old rule against new, in throwaway repositories on git 2.56."
+}
