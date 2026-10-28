@@ -1009,6 +1009,52 @@ describe('checkSecretLeaks', () => {
     const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
   });
+
+  it('does NOT flag an English hyphenation whose word ends in sk- (ask-, task-, risk-, desk-)', async () => {
+    const lessonsDir = path.join(tmpDir, '.totem', 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(lessonsDir, 'hyphenation-lesson.md'),
+      [
+        '# Lesson',
+        'Ask-the-registered-lead-first-and-only-then-act is the rule at a sentence start.',
+        'The rule is ask-the-registered-lead-first-and-only-then-act.',
+        'A task-that-runs-longer-than-a-single-session needs a checkpoint.',
+        'The risk-of-a-silent-skip-at-push-time is the datum.',
+        'A desk-check-before-the-first-commit-of-the-day catches it.',
+      ].join('\n'),
+    );
+    const result = await checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toBe('No leaked keys detected');
+  });
+
+  it('still flags a key whose token starts at sk- after a quote, a bracket, an equals sign, an underscore or a digit', async () => {
+    const key = 'sk-abcdefghijklmnopqrstuvwxyz1234567890';
+    const cases = [`"${key}"`, `(${key})`, `OPENAI_API_KEY=${key}`, `KEY_${key}`, `v2${key}`];
+    for (const [i, text] of cases.entries()) {
+      const dir = path.join(tmpDir, `case-${i}`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'CLAUDE.md'), `Use this: ${text}`);
+      const result = await checkSecretLeaks(dir);
+      expect(result.status, text).toBe('fail');
+    }
+  });
+
+  it('lets through, as the release note discloses, a key glued to the letter that ends an escape or a percent-encoding', async () => {
+    // The disclosed limit of the letters-only boundary, pinned so a later change
+    // shows up as one: the raw character before `sk-` is the `n` of a literal
+    // backslash-n and the `F` of `%2F`, each a letter, so neither token starts a match.
+    const key = 'sk-abcdefghijklmnopqrstuvwxyz1234567890';
+    const lessonsDir = path.join(tmpDir, '.totem', 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(lessonsDir, 'encoded-lesson.md'),
+      ['# Lesson', `"text":"line one\\n${key}"`, `?next=value%2F${key}`].join('\n'),
+    );
+    const result = await checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('pass');
+  });
 });
 
 // ─── Embedding config check ─────────────────────────────
