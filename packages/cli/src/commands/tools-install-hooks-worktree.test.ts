@@ -119,6 +119,25 @@ describe('tools/install-hooks.js from a linked worktree (mmnto-ai/totem#3122)', 
     }
   });
 
+  it("a bare repository's worktree writes in hook context: GIT_DIR names the worktree, the bare read is about the common dir", () => {
+    const bare = path.join(tmpDir, 'repo.git');
+    git(['clone', '-q', '--bare', main, bare], tmpDir);
+    const checkout = path.join(tmpDir, 'bare-wt');
+    git(['-C', bare, 'worktree', 'add', '-q', checkout, 'HEAD'], tmpDir);
+    plantScript(checkout, 'bare');
+    // What a hook exports: with it inherited, `rev-parse --is-bare-repository` run in
+    // the common dir would describe the worktree and answer false, and the script would
+    // skip a directory nothing else owns.
+    const gitDir = execFileSync('git', ['-C', checkout, 'rev-parse', '--absolute-git-dir'], {
+      encoding: 'utf-8',
+    }).trim();
+    const result = runScript(checkout, { GIT_DIR: gitDir });
+    expect(result.status).toBe(0);
+    for (const hook of ['pre-commit', 'pre-push', 'post-merge']) {
+      expect(fs.readFileSync(path.join(bare, 'hooks', hook), 'utf-8')).toContain(`bare ${hook}`);
+    }
+  });
+
   it('a bare repository whose flag lives in config.worktree, spelled yes, still writes', () => {
     const bare = path.join(tmpDir, 'repo.git');
     git(['clone', '-q', '--bare', main, bare], tmpDir);

@@ -1972,6 +1972,37 @@ describe('installHooksNonInteractive', () => {
     }
   });
 
+  it('a worktree of a BARE repository still writes in hook context: the bare read in the common dir carries the scrubbed env too', async () => {
+    const { main } = initRepoWithWorktree(tmpDir);
+    const bare = path.join(tmpDir, 'repo.git');
+    execFileSync('git', ['clone', '-q', '--bare', main, bare], { stdio: 'ignore' });
+    const checkout = path.join(tmpDir, 'bare-wt');
+    execFileSync('git', ['-C', bare, 'worktree', 'add', '-q', checkout, 'HEAD'], {
+      stdio: 'ignore',
+    });
+    // With GIT_DIR naming the worktree's gitdir, as a hook exports it, a bare read run
+    // in the common dir with the inherited env describes the WORKTREE (not bare) and
+    // the install would skip a directory nothing else owns (the hook lane's round 9).
+    const checkoutGitDir = execFileSync(
+      'git',
+      ['-C', checkout, 'rev-parse', '--absolute-git-dir'],
+      { encoding: 'utf-8' },
+    ).trim();
+    const previous = process.env.GIT_DIR;
+    process.env.GIT_DIR = checkoutGitDir;
+    try {
+      expect(commonRepositoryIsBare(checkout)).toBe(true);
+      const result = await installHooksNonInteractive(checkout);
+      expect(result).not.toBeNull();
+      expect(fs.readFileSync(path.join(bare, 'hooks', 'pre-push'), 'utf-8')).toContain(
+        TOTEM_PREPUSH_MARKER,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = previous;
+    }
+  });
+
   it('scrubs the same git location variables core does', async () => {
     const { envWithoutGitLocation } = await import('@mmnto/totem');
     const env = {

@@ -171,10 +171,14 @@ function isBareFromDirs(dirs: GitDirs): boolean {
   // git's own answer, asked IN the common dir: it reads core.bare wherever git
   // keeps it — `config`, or the main worktree's `config.worktree` once
   // extensions.worktreeConfig is on (`git sparse-checkout` turns it on and moves
-  // the flag there), where a read of `config` alone comes up empty.
+  // the flag there), where a read of `config` alone comes up empty. The read is
+  // about the COMMON dir, not this worktree, so it carries the env scrubbed of
+  // git's location variables: in a hook, `GIT_DIR` names the worktree and would
+  // make this answer "false" for a bare repository's worktree.
   const asked = spawnSync('git', ['rev-parse', '--is-bare-repository'], {
     cwd: dirs.commonDir,
     encoding: 'utf-8',
+    env: envForAnotherWorktree(),
   });
   if (asked.status === 0 && asked.stdout) return asked.stdout.trim() === 'true';
   // When that read fails: `config`, and `config.worktree` only when `config` turns

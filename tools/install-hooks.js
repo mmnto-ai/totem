@@ -15,6 +15,27 @@ const gitPath = join(rootDir, '.git');
 
 const hooks = ['pre-commit', 'pre-push', 'post-merge'];
 
+/**
+ * Git exports its repository-location variables into every hook it runs, and a
+ * `pnpm install` started from a hook inherits them, so a read meant to describe
+ * the COMMON dir would describe the worktree the hook ran from instead (`GIT_DIR`
+ * wins over `cwd`). The same list the CLI installer scrubs (mmnto-ai/totem#2801).
+ */
+const GIT_LOCATION_ENV_VARS = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CEILING_DIRECTORIES',
+];
+function envForAnotherDir() {
+  const scrubbed = { ...process.env };
+  for (const name of GIT_LOCATION_ENV_VARS) delete scrubbed[name];
+  return scrubbed;
+}
+
 if (!existsSync(gitPath)) {
   console.log('[totem] Not a git repository — skipping hook installation.');
   process.exit(0);
@@ -68,6 +89,7 @@ function resolveHooksDir() {
     const asked = spawnSync('git', ['rev-parse', '--is-bare-repository'], {
       cwd: commonDirPath,
       encoding: 'utf-8',
+      env: envForAnotherDir(),
     });
     const bare =
       asked.status === 0 && asked.stdout
