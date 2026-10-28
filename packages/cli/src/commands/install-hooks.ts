@@ -241,29 +241,53 @@ export function envForAnotherWorktree(env: NodeJS.ProcessEnv = process.env): Nod
 }
 
 /**
- * The roots of the other worktrees of the repository `gitRoot` belongs to, as git
- * lists them (`worktree list --porcelain -z`, the main worktree first, each path
- * exact: `-z` ends every attribute with NUL, so a root ending in a space survives
- * where line-splitting and trimming lost it). `gitRoot` itself is left out by real
- * path; a bare entry has no root to run hooks from and carries no `worktree` line
- * to begin with. `null` when git cannot list them: the caller treats a repository
- * whose worktrees it cannot see as one it cannot clear for a write.
+ * The worktree roots in a `git worktree list --porcelain` output, exact. With `-z`
+ * (git 2.36 and newer) every attribute ends in NUL, so a root ending in a space
+ * survives; the line form of an older git (Ubuntu 22.04 ships 2.34) ends attributes
+ * in a newline, so only the line ending is dropped, never a trailing space, and only
+ * a newline inside a path is lost. The bare, locked, prunable and HEAD attributes
+ * are not roots and are ignored. Exported for its own test.
  */
-function otherWorktreeRoots(gitRoot: string): string[] | null {
-  const listed = spawnSync('git', ['worktree', 'list', '--porcelain', '-z'], {
-    cwd: gitRoot,
-    encoding: 'utf-8',
-    env: envForAnotherWorktree(),
-  });
-  if (listed.status !== 0 || typeof listed.stdout !== 'string') return null;
-  const self = realpathNearest(gitRoot);
+export function parseWorktreeRoots(stdout: string, separator: '\0' | '\n'): string[] {
   const roots: string[] = [];
-  for (const attribute of listed.stdout.split('\0')) {
+  for (const raw of stdout.split(separator)) {
+    const attribute = separator === '\n' && raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     if (!attribute.startsWith('worktree ')) continue;
     const root = attribute.slice('worktree '.length);
-    if (root !== '' && realpathNearest(root) !== self) roots.push(root);
+    if (root !== '') roots.push(root);
   }
   return roots;
+}
+
+/**
+ * The roots of the other worktrees of the repository `gitRoot` belongs to, as git
+ * lists them (`worktree list --porcelain -z`, the main worktree first; when this git
+ * does not know `-z`, the line form, which keeps a trailing space too). `gitRoot`
+ * itself is left out by real path; a bare entry has no root to run hooks from and
+ * carries no `worktree` line to begin with. `null` when git cannot list them for
+ * any reason but the missing flag: the caller treats a repository whose worktrees
+ * it cannot see as one it cannot clear for a write.
+ */
+function otherWorktreeRoots(gitRoot: string): string[] | null {
+  const list = (args: string[]) =>
+    spawnSync('git', ['worktree', 'list', '--porcelain', ...args], {
+      cwd: gitRoot,
+      encoding: 'utf-8',
+      env: envForAnotherWorktree(),
+    });
+  let listed = list(['-z']);
+  let separator: '\0' | '\n' = '\0';
+  // git 2.35 and older reject `-z` here with "unknown option" and the usage text,
+  // exit 129; that one failure means "ask the older way", every other one is real.
+  if (listed.status !== 0 && /unknown option/i.test(listed.stderr ?? '')) {
+    listed = list([]);
+    separator = '\n';
+  }
+  if (listed.status !== 0 || typeof listed.stdout !== 'string') return null;
+  const self = realpathNearest(gitRoot);
+  return parseWorktreeRoots(listed.stdout, separator).filter(
+    (root) => realpathNearest(root) !== self,
+  );
 }
 
 /**

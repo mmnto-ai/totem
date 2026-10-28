@@ -36,6 +36,7 @@ import {
   isAttestedTrailer,
   isLinkedWorktree,
   isTotemOwnedWithAttestedTrailer,
+  parseWorktreeRoots,
   sharedHooksJudgment,
   sharedHooksOwnedByMainWorktree,
   TOTEM_CHECKOUT_END,
@@ -2166,6 +2167,44 @@ describe('installHooksNonInteractive', () => {
       }
     },
   );
+
+  it('parseWorktreeRoots reads both porcelain shapes exactly: NUL-separated from -z, line-separated from an older git, trailing spaces kept', () => {
+    // git 2.36 added `-z` to `worktree list --porcelain`; an older git (Ubuntu 22.04
+    // ships 2.34) gets the line form, which must keep a root's trailing space and drop
+    // only the line ending, and ignore the bare, locked and prunable attributes.
+    const nul = [
+      'worktree /repo/main ',
+      'HEAD 0123456789abcdef0123456789abcdef01234567',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/topic',
+      'HEAD 0123456789abcdef0123456789abcdef01234567',
+      'detached',
+      'locked media',
+      '',
+      'worktree /repo/gone',
+      'prunable gitdir file points to non-existent location',
+      '',
+      '',
+    ].join('\0');
+    expect(parseWorktreeRoots(nul, '\0')).toEqual(['/repo/main ', '/repo/topic', '/repo/gone']);
+
+    const lines = [
+      'worktree /repo/main ',
+      'HEAD 0123456789abcdef0123456789abcdef01234567',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/topic',
+      'HEAD 0123456789abcdef0123456789abcdef01234567',
+      'detached',
+      '',
+    ].join('\r\n');
+    expect(parseWorktreeRoots(lines, '\n')).toEqual(['/repo/main ', '/repo/topic']);
+
+    const bare = ['worktree /repo.git', 'bare', '', ''].join('\n');
+    expect(parseWorktreeRoots(bare, '\n')).toEqual(['/repo.git']);
+    expect(parseWorktreeRoots('', '\n')).toEqual([]);
+  });
 
   it('scrubs the same git location variables core does', async () => {
     const { envWithoutGitLocation } = await import('@mmnto/totem');
