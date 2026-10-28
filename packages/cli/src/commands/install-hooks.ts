@@ -209,43 +209,71 @@ function realpathNearest(target: string): string {
 }
 
 /**
- * Whether git resolves `core.hooksPath` per worktree for `gitRoot`: a value set in
- * the worktree's own `config.worktree`, or a relative value, which git takes from
- * the root of whichever worktree runs the hook. An absolute value in a shared
- * config is one directory every worktree runs, wherever it lies, and an unset
- * value is the common hooks dir. Read from git's own answer with its origin.
+ * The roots of the other worktrees of the repository `gitRoot` belongs to, as git
+ * lists them (`worktree list --porcelain`, the main worktree first). `gitRoot`
+ * itself is left out by real path; a bare entry has no root to run hooks from and
+ * carries no `worktree` line to begin with. An unanswerable list is an empty one.
  */
-function hooksPathIsPerWorktree(gitRoot: string): boolean {
-  const asked = spawnSync('git', ['config', '--show-origin', '--get', 'core.hooksPath'], {
+function otherWorktreeRoots(gitRoot: string): string[] {
+  const listed = spawnSync('git', ['worktree', 'list', '--porcelain'], {
     cwd: gitRoot,
     encoding: 'utf-8',
   });
-  if (asked.status !== 0 || !asked.stdout || !asked.stdout.trim()) return false;
-  const line = asked.stdout.trim();
-  const tab = line.indexOf('\t');
-  const origin = tab === -1 ? '' : line.slice(0, tab);
-  const value = tab === -1 ? line : line.slice(tab + 1);
-  if (/config\.worktree$/.test(origin)) return true;
-  return !path.isAbsolute(value) && !value.startsWith('~');
+  if (listed.status !== 0 || !listed.stdout) return [];
+  const self = realpathNearest(gitRoot);
+  const roots: string[] = [];
+  for (const line of listed.stdout.split('\n')) {
+    if (!line.startsWith('worktree ')) continue;
+    const root = line.slice('worktree '.length).trim();
+    if (root !== '' && realpathNearest(root) !== self) roots.push(root);
+  }
+  return roots;
+}
+
+/**
+ * Whether another worktree of the repository runs the hooks directory `hooksDir`:
+ * git's own answer from each other worktree's root (`rev-parse --git-path hooks`,
+ * which honors that worktree's `core.hooksPath`, shared or per-worktree, relative
+ * or absolute), compared by real location. This is the one test that tells a
+ * shared hooks directory from a worktree's own without modelling how git resolves
+ * the value. A relative `core.hooksPath` in the shared config is per worktree in
+ * general and shared when sibling worktrees resolve it to one directory
+ * (`../hooks` beside `/repo/main` and `/repo/topic`); an absolute one is shared
+ * wherever it lies; one set in this worktree's own `config.worktree` is its own
+ * unless it names a directory another worktree also runs; a link to a shared
+ * directory compares by where it points. A worktree git lists but cannot answer
+ * from (a pruned or locked checkout) runs nothing and is skipped.
+ */
+function anotherWorktreeRunsHooksDir(gitRoot: string, hooksDir: string): boolean {
+  const target = realpathNearest(hooksDir);
+  for (const root of otherWorktreeRoots(gitRoot)) {
+    const asked = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
+      cwd: root,
+      encoding: 'utf-8',
+    });
+    if (asked.status !== 0 || !asked.stdout || !asked.stdout.trim()) continue;
+    if (realpathNearest(path.resolve(root, asked.stdout.trim())) === target) return true;
+  }
+  return false;
 }
 
 /**
  * Whether the hooks dir `hooksDir` resolved for `gitRoot` is the main worktree's to
  * write: `gitRoot` is a linked worktree of a non-bare repository and the dir is one
  * every worktree runs (mmnto-ai/totem#3122). The one truth the installer's skip and
- * the doctor row's remedy both read; the dirs resolve once. The worktree's own
- * hooks dir, which it may write, is one git resolves per worktree (a relative or
- * `config.worktree` `core.hooksPath`) AND whose real location is not the common
- * hooks dir, so a link to the shared directory stays shared; a bare repository has
- * no main worktree to own anything.
+ * the doctor row's remedy both read; the dirs resolve once. A shared hooks dir is
+ * the common one (by real location, so a link to it stays shared) or any directory
+ * another worktree of the repository resolves its hooks to, read from git in that
+ * worktree; the worktree's own hooks dir, which it may write, is one no other
+ * worktree runs. A bare repository has no main worktree to own anything.
  */
 export function sharedHooksOwnedByMainWorktree(gitRoot: string, hooksDir: string): boolean {
   const dirs = resolveGitDirs(gitRoot);
-  if (dirs === null || !isLinkedFromDirs(dirs)) return false;
-  const ownDir =
-    hooksPathIsPerWorktree(gitRoot) &&
-    realpathNearest(hooksDir) !== realpathNearest(path.join(dirs.commonDir, 'hooks'));
-  return !ownDir && !isBareFromDirs(dirs);
+  if (dirs === null || !isLinkedFromDirs(dirs) || isBareFromDirs(dirs)) return false;
+  return (
+    realpathNearest(hooksDir) === realpathNearest(path.join(dirs.commonDir, 'hooks')) ||
+    anotherWorktreeRunsHooksDir(gitRoot, hooksDir)
+  );
 }
 
 /**

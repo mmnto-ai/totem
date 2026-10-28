@@ -1885,6 +1885,36 @@ describe('installHooksNonInteractive', () => {
     }
   });
 
+  it('a relative core.hooksPath that sibling worktrees resolve to one directory is shared: the install skips, --force writes', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    // `../hooks` is relative, and git takes it from each worktree's root, but `main`
+    // and `linked` are siblings, so both run the same directory: the test is what
+    // the OTHER worktree resolves, not the value's shape (the bots' round 3).
+    execFileSync('git', ['-C', main, 'config', 'core.hooksPath', '../hooks'], {
+      stdio: 'ignore',
+    });
+    const sharedDir = path.resolve(main, '..', 'hooks');
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((message: unknown) => {
+      lines.push(String(message));
+    });
+    try {
+      expect(await installHooksNonInteractive(linked)).toBeNull();
+      expect(fs.existsSync(path.join(sharedDir, 'pre-push'))).toBe(false);
+      expect(
+        lines.some((line) => line.includes('linked worktree') && line.includes('--force')),
+      ).toBe(true);
+
+      const forced = await installHooksNonInteractive(linked, true);
+      expect(forced).not.toBeNull();
+      expect(fs.readFileSync(path.join(sharedDir, 'pre-push'), 'utf-8')).toContain(
+        TOTEM_PREPUSH_MARKER,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('a bare repository whose flag moved to config.worktree (extensions.worktreeConfig) still reads bare and writes', async () => {
     const { main } = initRepoWithWorktree(tmpDir);
     const bare = path.join(tmpDir, 'repo.git');
