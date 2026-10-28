@@ -1040,6 +1040,21 @@ describe('checkSecretLeaks', () => {
       expect(result.status, text).toBe('fail');
     }
   });
+
+  it('lets through, as the release note discloses, a key glued to the letter that ends an escape or a percent-encoding', async () => {
+    // The disclosed limit of the letters-only boundary, pinned so a later change
+    // shows up as one: the raw character before `sk-` is the `n` of a literal
+    // backslash-n and the `F` of `%2F`, each a letter, so neither token starts a match.
+    const key = 'sk-abcdefghijklmnopqrstuvwxyz1234567890';
+    const lessonsDir = path.join(tmpDir, '.totem', 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(lessonsDir, 'encoded-lesson.md'),
+      ['# Lesson', `"text":"line one\\n${key}"`, `?next=value%2F${key}`].join('\n'),
+    );
+    const result = await checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('pass');
+  });
 });
 
 // ─── Embedding config check ─────────────────────────────
