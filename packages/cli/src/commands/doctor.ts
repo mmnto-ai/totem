@@ -213,8 +213,8 @@ export async function checkGitHooks(
   // runs against THIS checkout's templates, and its remedies run from here would skip
   // (a bare install) or write this checkout's templates for every worktree
   // (`--force`), so the row says what it compared against and sends the remedy to
-  // the main worktree. A hooks dir inside this worktree (a relative core.hooksPath)
-  // is its own and reads as before.
+  // the main worktree. A hooks dir no other worktree runs (read from git in each)
+  // is this worktree's own and reads as before.
   // An installer module that fails to load is reported by the sensor below as
   // 'unavailable' (mmnto-ai/totem#2701), so this read maps that one rejection to
   // "not a linked worktree" instead of pre-empting the sensor's report with its own

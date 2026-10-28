@@ -28,6 +28,7 @@ import {
   checkHooksInstalled,
   commonRepositoryIsBare,
   declaredHookTier,
+  envForAnotherWorktree,
   generateHookHelpers,
   getFallbackCommand,
   installGitHook,
@@ -1913,6 +1914,79 @@ describe('installHooksNonInteractive', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('reads the other worktrees with git location variables scrubbed, as a hook run from a linked worktree exports GIT_DIR', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    for (const args of [
+      ['config', 'core.repositoryformatversion', '1'],
+      ['config', 'extensions.worktreeConfig', 'true'],
+    ]) {
+      execFileSync('git', ['-C', main, ...args], { stdio: 'ignore' });
+    }
+    // git exports GIT_DIR into every hook it runs; from a linked worktree that is the
+    // worktree's own gitdir, and the pre-push runs `doctor --strict`, which reads this
+    // predicate. Without the scrub, main's `rev-parse` answers for the LINKED worktree
+    // (the round-3 leg's F1). The env is set only around the install, never around the
+    // git calls that set the scene.
+    const linkedGitDir = execFileSync('git', ['-C', linked, 'rev-parse', '--absolute-git-dir'], {
+      encoding: 'utf-8',
+    }).trim();
+    const asHook = async <T>(run: () => Promise<T>): Promise<T> => {
+      const previous = process.env.GIT_DIR;
+      process.env.GIT_DIR = linkedGitDir;
+      try {
+        return await run();
+      } finally {
+        if (previous === undefined) delete process.env.GIT_DIR;
+        else process.env.GIT_DIR = previous;
+      }
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // Only this worktree runs `outside`: written, GIT_DIR or not.
+      const outside = path.join(tmpDir, 'wt-hooks-outside');
+      execFileSync('git', ['-C', linked, 'config', '--worktree', 'core.hooksPath', outside], {
+        stdio: 'ignore',
+      });
+      expect(await asHook(() => installHooksNonInteractive(linked))).not.toBeNull();
+      expect(fs.existsSync(path.join(outside, 'pre-push'))).toBe(true);
+
+      // The converse: the shared config gives every worktree a relative `.githooks`,
+      // and main overrides its own to the directory INSIDE this worktree, so main runs
+      // this worktree's `.githooks` and the install from here skips it.
+      execFileSync('git', ['-C', linked, 'config', '--worktree', '--unset', 'core.hooksPath'], {
+        stdio: 'ignore',
+      });
+      execFileSync('git', ['-C', main, 'config', 'core.hooksPath', '.githooks'], {
+        stdio: 'ignore',
+      });
+      const insideLinked = path.join(linked, '.githooks');
+      execFileSync('git', ['-C', main, 'config', '--worktree', 'core.hooksPath', insideLinked], {
+        stdio: 'ignore',
+      });
+      expect(await asHook(() => installHooksNonInteractive(linked))).toBeNull();
+      expect(fs.existsSync(path.join(insideLinked, 'pre-push'))).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('scrubs the same git location variables core does', async () => {
+    const { envWithoutGitLocation } = await import('@mmnto/totem');
+    const env = {
+      GIT_DIR: 'a',
+      GIT_WORK_TREE: 'b',
+      GIT_COMMON_DIR: 'c',
+      GIT_INDEX_FILE: 'd',
+      GIT_OBJECT_DIRECTORY: 'e',
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: 'f',
+      GIT_CEILING_DIRECTORIES: 'g',
+      PATH: 'kept',
+      GIT_AUTHOR_NAME: 'kept',
+    };
+    expect(envForAnotherWorktree(env)).toEqual(envWithoutGitLocation(env));
+    expect(envForAnotherWorktree(env).PATH).toBe('kept');
   });
 
   it('a bare repository whose flag moved to config.worktree (extensions.worktreeConfig) still reads bare and writes', async () => {

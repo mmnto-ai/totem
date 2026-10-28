@@ -122,8 +122,8 @@ function isLinkedFromDirs(dirs: GitDirs): boolean {
 /**
  * Whether `gitRoot` is a LINKED worktree: a checkout whose git dir differs from
  * the repository's common dir, so the hooks dir {@link resolveHooksDir} returns
- * is, unless `core.hooksPath` aims inside the worktree, the one EVERY worktree
- * runs (mmnto-ai/totem#3122). A submodule has a pointer file but equal dirs and
+ * is, unless `core.hooksPath` gives this worktree a directory no other worktree
+ * runs, the one EVERY worktree runs (mmnto-ai/totem#3122). A submodule has a pointer file but equal dirs and
  * no `commondir`, so it reads false, as does a plain checkout.
  */
 export function isLinkedWorktree(gitRoot: string): boolean {
@@ -209,6 +209,34 @@ function realpathNearest(target: string): string {
 }
 
 /**
+ * Git's repository-location variables. Git exports them into every hook it runs,
+ * so from a linked worktree a hook (the pre-push's `doctor --strict` reads this
+ * module's predicate) carries `GIT_DIR` naming THIS worktree, and a read meant to
+ * describe ANOTHER worktree would describe this one instead: the other worktree's
+ * `rev-parse` would answer with this worktree's hooks dir. A copy of core's
+ * `GIT_LOCATION_ENV_VARS` (mmnto-ai/totem#2801), kept here because this module
+ * keeps the core barrel off the CLI's cold start; the test beside this file holds
+ * the two scrubs equal. The reads about THIS worktree keep the inherited env,
+ * which names it correctly.
+ */
+const GIT_LOCATION_ENV_VARS = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CEILING_DIRECTORIES',
+] as const;
+
+/** `env` with {@link GIT_LOCATION_ENV_VARS} removed, for a read about another worktree. */
+export function envForAnotherWorktree(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const scrubbed: NodeJS.ProcessEnv = { ...env };
+  for (const name of GIT_LOCATION_ENV_VARS) delete scrubbed[name];
+  return scrubbed;
+}
+
+/**
  * The roots of the other worktrees of the repository `gitRoot` belongs to, as git
  * lists them (`worktree list --porcelain`, the main worktree first). `gitRoot`
  * itself is left out by real path; a bare entry has no root to run hooks from and
@@ -218,6 +246,7 @@ function otherWorktreeRoots(gitRoot: string): string[] {
   const listed = spawnSync('git', ['worktree', 'list', '--porcelain'], {
     cwd: gitRoot,
     encoding: 'utf-8',
+    env: envForAnotherWorktree(),
   });
   if (listed.status !== 0 || !listed.stdout) return [];
   const self = realpathNearest(gitRoot);
@@ -239,10 +268,15 @@ function otherWorktreeRoots(gitRoot: string): string[] {
  * the value. A relative `core.hooksPath` in the shared config is per worktree in
  * general and shared when sibling worktrees resolve it to one directory
  * (`../hooks` beside `/repo/main` and `/repo/topic`); an absolute one is shared
- * wherever it lies; one set in this worktree's own `config.worktree` is its own
- * unless it names a directory another worktree also runs; a link to a shared
- * directory compares by where it points. A worktree git lists but cannot answer
- * from (a pruned or locked checkout) runs nothing and is skipped.
+ * wherever it lies for as long as another worktree runs it (every worktree that
+ * does not override it in its own `config.worktree`); one set in this worktree's
+ * own `config.worktree` is its own unless it names a directory another worktree
+ * also runs; a link to a shared directory compares by where it points. A worktree
+ * git lists but cannot be run from, because its directory is missing (pruned, or a
+ * locked checkout on unmounted media), is skipped; a locked worktree whose
+ * directory is present answers and counts. Each read carries the env scrubbed of
+ * git's location variables, so a hook context never makes the other worktree
+ * answer for this one.
  */
 function anotherWorktreeRunsHooksDir(gitRoot: string, hooksDir: string): boolean {
   const target = realpathNearest(hooksDir);
@@ -250,6 +284,7 @@ function anotherWorktreeRunsHooksDir(gitRoot: string, hooksDir: string): boolean
     const asked = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
       cwd: root,
       encoding: 'utf-8',
+      env: envForAnotherWorktree(),
     });
     if (asked.status !== 0 || !asked.stdout || !asked.stdout.trim()) continue;
     if (realpathNearest(path.resolve(root, asked.stdout.trim())) === target) return true;
@@ -2304,9 +2339,10 @@ export async function installHooksNonInteractive(
   // this branch's templates for every worktree of the repository and silently
   // reverts a newer main worktree's hooks (mmnto-ai/totem#3122). The main worktree
   // owns them; `--force` is the one way to write from a worktree. Two shapes write
-  // anyway: a hooks dir that lies inside THIS worktree (a relative or per-worktree
-  // `core.hooksPath`), which no other worktree runs, and a BARE repository, which
-  // has no main worktree to own them. The dirs resolve once for both checks. The
+  // anyway: a hooks dir no other worktree of the repository runs (read from git in
+  // each, so a relative or per-worktree `core.hooksPath` is this worktree's own
+  // only while no other worktree resolves to the same directory), and a BARE
+  // repository, which has no main worktree to own them. The dirs resolve once for both checks. The
   // session hooks the caller regenerates after this are per-checkout and unaffected.
   if (!force && sharedHooksOwnedByMainWorktree(gitRoot, hooksDir)) {
     console.error(HOOKS_SHARED_WORKTREE_MSG);
