@@ -2053,6 +2053,58 @@ describe('installHooksNonInteractive', () => {
     }
   });
 
+  it('a sibling that cannot answer, listed before one that runs the dir, does not take the blame: the skip names confirmed sharing only', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    for (const args of [
+      ['config', 'core.repositoryformatversion', '1'],
+      ['config', 'extensions.worktreeConfig', 'true'],
+    ]) {
+      execFileSync('git', ['-C', main, ...args], { stdio: 'ignore' });
+    }
+    // git lists worktrees in creation order: main, linked (self), linked2, linked3. Main
+    // overrides its hooks away; linked2 loses its `.git` pointer and cannot answer;
+    // linked3, created after it, genuinely runs the shared dir. The verdict is shared
+    // because linked3 runs it, and the explanation must say that, not blame linked2
+    // (the lane's slice read on the round-4 fold).
+    const shared = path.join(tmpDir, 'shared-hooks');
+    execFileSync('git', ['-C', main, 'config', 'core.hooksPath', shared], { stdio: 'ignore' });
+    execFileSync('git', ['-C', main, 'config', '--worktree', 'core.hooksPath', '.mh'], {
+      stdio: 'ignore',
+    });
+    const linked2 = path.join(tmpDir, 'linked2');
+    execFileSync('git', ['-C', main, 'worktree', 'add', '-q', '-b', 'topic2', linked2], {
+      stdio: 'ignore',
+    });
+    fs.rmSync(path.join(linked2, '.git'));
+    const linked3 = path.join(tmpDir, 'linked3');
+    execFileSync('git', ['-C', main, 'worktree', 'add', '-q', '-b', 'topic3', linked3], {
+      stdio: 'ignore',
+    });
+    // Pinned on linked3 itself: a worktree added after main's override inherits main's
+    // per-worktree value on this git (measured), so the shared dir is named explicitly.
+    execFileSync('git', ['-C', linked3, 'config', '--worktree', 'core.hooksPath', shared], {
+      stdio: 'ignore',
+    });
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((message: unknown) => {
+      lines.push(String(message));
+    });
+    try {
+      expect(await installHooksNonInteractive(linked)).toBeNull();
+      expect(fs.existsSync(path.join(shared, 'pre-push'))).toBe(false);
+      expect(lines.some((line) => line.includes('linked worktree'))).toBe(true);
+      expect(lines.some((line) => line.includes('could not say which hooks directory'))).toBe(
+        false,
+      );
+      const judgment = sharedHooksJudgment(linked, shared);
+      expect(judgment.ownedByMainWorktree).toBe(true);
+      expect(judgment.runs).toBe(true);
+      expect(judgment.unanswered.some((root) => root.includes('linked2'))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('a repository whose worktrees git cannot list is never cleared for a write: the install skips and says so', async () => {
     const { main, linked } = initRepoWithWorktree(tmpDir);
     for (const args of [

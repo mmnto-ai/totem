@@ -230,7 +230,7 @@ export async function checkGitHooks(
   // When the dir counts as shared only because a sibling could not answer, or git
   // could not list the worktrees, the row says so: the remedy is to fix that sibling.
   const unansweredNote =
-    judgment === null || !judgment.ownedByMainWorktree
+    judgment === null || !judgment.ownedByMainWorktree || judgment.runs
       ? ''
       : !judgment.listed
         ? '; shared because git could not list the worktrees of this repository'

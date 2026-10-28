@@ -335,6 +335,13 @@ function otherWorktreesRunningHooksDir(gitRoot: string, hooksDir: string): Other
 export interface SharedHooksJudgment {
   /** The hooks dir is shared and the main worktree's to write. */
   ownedByMainWorktree: boolean;
+  /**
+   * The sharing is CONFIRMED: the dir is the common one, or another worktree answered
+   * that it runs it. When true, `unanswered` and `listed` explain nothing about the
+   * verdict and a caller's explanation names the confirmed sharing, not the siblings
+   * that could not answer (the lane's slice read on the round-4 fold).
+   */
+  runs: boolean;
   /** Other worktrees that exist but could not say which hooks dir they run; the dir counts as shared while they stand. */
   unanswered: string[];
   /** Whether git could list the worktrees; `false` counts as shared too. */
@@ -344,14 +351,15 @@ export interface SharedHooksJudgment {
 export function sharedHooksJudgment(gitRoot: string, hooksDir: string): SharedHooksJudgment {
   const dirs = resolveGitDirs(gitRoot);
   if (dirs === null || !isLinkedFromDirs(dirs) || isBareFromDirs(dirs)) {
-    return { ownedByMainWorktree: false, unanswered: [], listed: true };
+    return { ownedByMainWorktree: false, runs: false, unanswered: [], listed: true };
   }
   if (realpathNearest(hooksDir) === realpathNearest(path.join(dirs.commonDir, 'hooks'))) {
-    return { ownedByMainWorktree: true, unanswered: [], listed: true };
+    return { ownedByMainWorktree: true, runs: true, unanswered: [], listed: true };
   }
   const others = otherWorktreesRunningHooksDir(gitRoot, hooksDir);
   return {
     ownedByMainWorktree: others.runs || others.unanswered.length > 0 || !others.listed,
+    runs: others.runs,
     unanswered: others.unanswered,
     listed: others.listed,
   };
@@ -2397,8 +2405,11 @@ export async function installHooksNonInteractive(
   const judgment = force ? null : sharedHooksJudgment(gitRoot, hooksDir);
   if (judgment !== null && judgment.ownedByMainWorktree) {
     console.error(HOOKS_SHARED_WORKTREE_MSG);
-    // The conservative arms say why no write was cleared, naming what stood in the way.
-    if (!judgment.listed) {
+    // The conservative arms say why no write was cleared, naming what stood in the
+    // way; when the sharing is confirmed, the standard line above is the whole reason.
+    if (judgment.runs) {
+      // confirmed: nothing to add
+    } else if (!judgment.listed) {
       console.error(
         '[Totem] git could not list the worktrees of this repository, so no worktree could be cleared of running this hooks directory; it is left alone. Run `git worktree list` here to see why, or `--force`.',
       );
