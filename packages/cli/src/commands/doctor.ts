@@ -225,15 +225,25 @@ export async function checkGitHooks(
     (module) => module,
     () => null,
   );
-  const ownedByMainWorktree =
-    installer !== null && installer.sharedHooksOwnedByMainWorktree(gitRoot, hooksDir);
+  const judgment = installer === null ? null : installer.sharedHooksJudgment(gitRoot, hooksDir);
+  const ownedByMainWorktree = judgment !== null && judgment.ownedByMainWorktree;
+  // When the dir counts as shared only because a sibling could not answer, or git
+  // could not list the worktrees, the row says so: the remedy is to fix that sibling.
+  const unansweredNote =
+    judgment === null || !judgment.ownedByMainWorktree
+      ? ''
+      : !judgment.listed
+        ? '; shared because git could not list the worktrees of this repository'
+        : judgment.unanswered.length > 0
+          ? `; shared because ${judgment.unanswered.length} worktree(s) could not say which hooks directory they run: ${judgment.unanswered.join(', ')}`
+          : '';
   // The redirect LEADS the remedy, so the first thing a reader copies is the safe
   // instruction and the command that would revert the shared hooks comes after it.
   const fromMainWorktree = ownedByMainWorktree
     ? "From this linked worktree, run the remedy from the main worktree — the hooks are shared by every worktree of the repository, a bare install from here skips them, and `--force` from here writes THIS checkout's templates for all of them (mmnto-ai/totem#3122). The remedy there: "
     : '';
   const judgedHere = ownedByMainWorktree
-    ? " (judged against this checkout's templates; the main worktree's may be newer)"
+    ? ` (judged against this checkout's templates; the main worktree's may be newer${unansweredNote})`
     : '';
   const markers: { file: string; marker: string }[] = [
     { file: 'pre-commit', marker: '[totem] pre-commit hook' },

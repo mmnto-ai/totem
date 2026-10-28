@@ -242,22 +242,25 @@ export function envForAnotherWorktree(env: NodeJS.ProcessEnv = process.env): Nod
 
 /**
  * The roots of the other worktrees of the repository `gitRoot` belongs to, as git
- * lists them (`worktree list --porcelain`, the main worktree first). `gitRoot`
- * itself is left out by real path; a bare entry has no root to run hooks from and
- * carries no `worktree` line to begin with. An unanswerable list is an empty one.
+ * lists them (`worktree list --porcelain -z`, the main worktree first, each path
+ * exact: `-z` ends every attribute with NUL, so a root ending in a space survives
+ * where line-splitting and trimming lost it). `gitRoot` itself is left out by real
+ * path; a bare entry has no root to run hooks from and carries no `worktree` line
+ * to begin with. `null` when git cannot list them: the caller treats a repository
+ * whose worktrees it cannot see as one it cannot clear for a write.
  */
-function otherWorktreeRoots(gitRoot: string): string[] {
-  const listed = spawnSync('git', ['worktree', 'list', '--porcelain'], {
+function otherWorktreeRoots(gitRoot: string): string[] | null {
+  const listed = spawnSync('git', ['worktree', 'list', '--porcelain', '-z'], {
     cwd: gitRoot,
     encoding: 'utf-8',
     env: envForAnotherWorktree(),
   });
-  if (listed.status !== 0 || !listed.stdout) return [];
+  if (listed.status !== 0 || typeof listed.stdout !== 'string') return null;
   const self = realpathNearest(gitRoot);
   const roots: string[] = [];
-  for (const line of listed.stdout.split('\n')) {
-    if (!line.startsWith('worktree ')) continue;
-    const root = line.slice('worktree '.length).trim();
+  for (const attribute of listed.stdout.split('\0')) {
+    if (!attribute.startsWith('worktree ')) continue;
+    const root = attribute.slice('worktree '.length);
     if (root !== '' && realpathNearest(root) !== self) roots.push(root);
   }
   return roots;
@@ -276,24 +279,44 @@ function otherWorktreeRoots(gitRoot: string): string[] {
  * does not override it in its own `config.worktree`); one set in this worktree's
  * own `config.worktree` is its own unless it names a directory another worktree
  * also runs; a link to a shared directory compares by where it points. A worktree
- * git lists but cannot be run from, because its directory is missing (pruned, or a
- * locked checkout on unmounted media), is skipped; a locked worktree whose
- * directory is present answers and counts. Each read carries the env scrubbed of
- * git's location variables, so a hook context never makes the other worktree
- * answer for this one.
+ * git lists whose directory is missing (pruned, or a locked checkout on unmounted
+ * media) runs nothing and is skipped; one whose directory exists but which cannot
+ * say which hooks directory it runs (a broken `config.worktree` there) is returned
+ * as UNANSWERED, and the caller counts the directory as shared while it stands,
+ * since a broken sibling must never clear a write (Tenet 4). Each read carries the
+ * env scrubbed of git's location variables, so a hook context never makes the other
+ * worktree answer for this one.
  */
-function anotherWorktreeRunsHooksDir(gitRoot: string, hooksDir: string): boolean {
+interface OtherWorktreesVerdict {
+  /** Another worktree resolves its hooks to `hooksDir`. */
+  runs: boolean;
+  /** Listed roots whose directory exists but which could not answer; never one whose directory is missing. */
+  unanswered: string[];
+  /** Whether git could list the worktrees at all; `false` is never cleared for a write. */
+  listed: boolean;
+}
+
+function otherWorktreesRunningHooksDir(gitRoot: string, hooksDir: string): OtherWorktreesVerdict {
+  const roots = otherWorktreeRoots(gitRoot);
+  if (roots === null) return { runs: false, unanswered: [], listed: false };
   const target = realpathNearest(hooksDir);
-  for (const root of otherWorktreeRoots(gitRoot)) {
+  const unanswered: string[] = [];
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
     const asked = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
       cwd: root,
       encoding: 'utf-8',
       env: envForAnotherWorktree(),
     });
-    if (asked.status !== 0 || !asked.stdout || !asked.stdout.trim()) continue;
-    if (realpathNearest(path.resolve(root, asked.stdout.trim())) === target) return true;
+    if (asked.status !== 0 || !asked.stdout || !asked.stdout.trim()) {
+      unanswered.push(root);
+      continue;
+    }
+    if (realpathNearest(path.resolve(root, asked.stdout.trim())) === target) {
+      return { runs: true, unanswered, listed: true };
+    }
   }
-  return false;
+  return { runs: false, unanswered, listed: true };
 }
 
 /**
@@ -301,18 +324,41 @@ function anotherWorktreeRunsHooksDir(gitRoot: string, hooksDir: string): boolean
  * write: `gitRoot` is a linked worktree of a non-bare repository and the dir is one
  * every worktree runs (mmnto-ai/totem#3122). The one truth the installer's skip and
  * the doctor row's remedy both read; the dirs resolve once. A shared hooks dir is
- * the common one (by real location, so a link to it stays shared) or any directory
+ * the common one (by real location, so a link to it stays shared), or any directory
  * another worktree of the repository resolves its hooks to, read from git in that
- * worktree; the worktree's own hooks dir, which it may write, is one no other
- * worktree runs. A bare repository has no main worktree to own anything.
+ * worktree, or one no listed worktree could be cleared of running (a sibling whose
+ * directory exists but cannot answer, or a repository whose worktrees git cannot
+ * list), the conservative direction; the worktree's own hooks dir, which it may
+ * write, is one every other worktree was asked about and none runs. A bare
+ * repository has no main worktree to own anything.
  */
-export function sharedHooksOwnedByMainWorktree(gitRoot: string, hooksDir: string): boolean {
+export interface SharedHooksJudgment {
+  /** The hooks dir is shared and the main worktree's to write. */
+  ownedByMainWorktree: boolean;
+  /** Other worktrees that exist but could not say which hooks dir they run; the dir counts as shared while they stand. */
+  unanswered: string[];
+  /** Whether git could list the worktrees; `false` counts as shared too. */
+  listed: boolean;
+}
+
+export function sharedHooksJudgment(gitRoot: string, hooksDir: string): SharedHooksJudgment {
   const dirs = resolveGitDirs(gitRoot);
-  if (dirs === null || !isLinkedFromDirs(dirs) || isBareFromDirs(dirs)) return false;
-  return (
-    realpathNearest(hooksDir) === realpathNearest(path.join(dirs.commonDir, 'hooks')) ||
-    anotherWorktreeRunsHooksDir(gitRoot, hooksDir)
-  );
+  if (dirs === null || !isLinkedFromDirs(dirs) || isBareFromDirs(dirs)) {
+    return { ownedByMainWorktree: false, unanswered: [], listed: true };
+  }
+  if (realpathNearest(hooksDir) === realpathNearest(path.join(dirs.commonDir, 'hooks'))) {
+    return { ownedByMainWorktree: true, unanswered: [], listed: true };
+  }
+  const others = otherWorktreesRunningHooksDir(gitRoot, hooksDir);
+  return {
+    ownedByMainWorktree: others.runs || others.unanswered.length > 0 || !others.listed,
+    unanswered: others.unanswered,
+    listed: others.listed,
+  };
+}
+
+export function sharedHooksOwnedByMainWorktree(gitRoot: string, hooksDir: string): boolean {
+  return sharedHooksJudgment(gitRoot, hooksDir).ownedByMainWorktree;
 }
 
 /**
@@ -2348,8 +2394,19 @@ export async function installHooksNonInteractive(
   // only while no other worktree resolves to the same directory), and a BARE
   // repository, which has no main worktree to own them. The dirs resolve once for both checks. The
   // session hooks the caller regenerates after this are per-checkout and unaffected.
-  if (!force && sharedHooksOwnedByMainWorktree(gitRoot, hooksDir)) {
+  const judgment = force ? null : sharedHooksJudgment(gitRoot, hooksDir);
+  if (judgment !== null && judgment.ownedByMainWorktree) {
     console.error(HOOKS_SHARED_WORKTREE_MSG);
+    // The conservative arms say why no write was cleared, naming what stood in the way.
+    if (!judgment.listed) {
+      console.error(
+        '[Totem] git could not list the worktrees of this repository, so no worktree could be cleared of running this hooks directory; it is left alone. Run `git worktree list` here to see why, or `--force`.',
+      );
+    } else if (judgment.unanswered.length > 0) {
+      console.error(
+        `[Totem] ${judgment.unanswered.length} worktree(s) git lists could not say which hooks directory they run (${judgment.unanswered.join(', ')}), so this one counts as shared and is left alone. Fix or prune them, or \`--force\`.`,
+      );
+    }
     return null;
   }
 

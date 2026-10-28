@@ -36,6 +36,8 @@ import {
   isAttestedTrailer,
   isLinkedWorktree,
   isTotemOwnedWithAttestedTrailer,
+  sharedHooksJudgment,
+  sharedHooksOwnedByMainWorktree,
   TOTEM_CHECKOUT_END,
   TOTEM_CHECKOUT_MARKER,
   TOTEM_HOOK_END,
@@ -2002,6 +2004,116 @@ describe('installHooksNonInteractive', () => {
       else process.env.GIT_DIR = previous;
     }
   });
+
+  it('a listed worktree that exists but cannot say which hooks dir it runs makes the dir count as shared: the install skips and names it', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    for (const args of [
+      ['config', 'core.repositoryformatversion', '1'],
+      ['config', 'extensions.worktreeConfig', 'true'],
+    ]) {
+      execFileSync('git', ['-C', main, ...args], { stdio: 'ignore' });
+    }
+    // A shared absolute hooks dir outside the common one, so the common match fails and
+    // the other worktrees decide. Main keeps its own `.mh` through config.worktree, so
+    // nothing else runs the shared dir; a second linked worktree loses its `.git` pointer,
+    // so git still lists it (prunable) and its directory exists, but it cannot answer.
+    // A sibling that cannot answer must never clear a write (the bots' round 4).
+    const shared = path.join(tmpDir, 'shared-hooks');
+    execFileSync('git', ['-C', main, 'config', 'core.hooksPath', shared], { stdio: 'ignore' });
+    execFileSync('git', ['-C', main, 'config', '--worktree', 'core.hooksPath', '.mh'], {
+      stdio: 'ignore',
+    });
+    const linked2 = path.join(tmpDir, 'linked2');
+    execFileSync('git', ['-C', main, 'worktree', 'add', '-q', '-b', 'topic2', linked2], {
+      stdio: 'ignore',
+    });
+    fs.rmSync(path.join(linked2, '.git'));
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((message: unknown) => {
+      lines.push(String(message));
+    });
+    try {
+      expect(await installHooksNonInteractive(linked)).toBeNull();
+      expect(fs.existsSync(path.join(shared, 'pre-push'))).toBe(false);
+      expect(
+        lines.some(
+          (line) =>
+            line.includes('could not say which hooks directory') && line.includes('linked2'),
+        ),
+      ).toBe(true);
+      // The judgment names the sibling, and the boolean wrapper agrees.
+      const judgment = sharedHooksJudgment(linked, shared);
+      expect(judgment.ownedByMainWorktree).toBe(true);
+      expect(judgment.listed).toBe(true);
+      expect(judgment.unanswered.length).toBe(1);
+      expect(judgment.unanswered[0]).toContain('linked2');
+      expect(sharedHooksOwnedByMainWorktree(linked, shared)).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a repository whose worktrees git cannot list is never cleared for a write: the install skips and says so', async () => {
+    const { main, linked } = initRepoWithWorktree(tmpDir);
+    for (const args of [
+      ['config', 'core.repositoryformatversion', '1'],
+      ['config', 'extensions.worktreeConfig', 'true'],
+    ]) {
+      execFileSync('git', ['-C', main, ...args], { stdio: 'ignore' });
+    }
+    // Main's own config.worktree made unparseable: `git worktree list` reads every
+    // worktree's config and fails from here too, while this worktree's own reads still
+    // answer (measured: rev-parse from linked exits 0, the listing exits 128).
+    const shared = path.join(tmpDir, 'shared-hooks');
+    execFileSync('git', ['-C', main, 'config', 'core.hooksPath', shared], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(main, '.git', 'config.worktree'), '[core\n');
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((message: unknown) => {
+      lines.push(String(message));
+    });
+    try {
+      expect(await installHooksNonInteractive(linked)).toBeNull();
+      expect(fs.existsSync(path.join(shared, 'pre-push'))).toBe(false);
+      expect(lines.some((line) => line.includes('could not list the worktrees'))).toBe(true);
+      const judgment = sharedHooksJudgment(linked, shared);
+      expect(judgment.ownedByMainWorktree).toBe(true);
+      expect(judgment.listed).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'a worktree root ending in a space is read exactly, so the shared hooks dir it runs still counts: the install skips',
+    async () => {
+      // `worktree list --porcelain -z` ends each attribute with NUL and never trims; a
+      // line-split-and-trim read would run the lookup from a path that does not exist and
+      // read the directory as this worktree's own (the bots' round 4).
+      const main = path.join(tmpDir, 'main ');
+      fs.mkdirSync(main, { recursive: true });
+      const git = (args: string[], cwd: string) =>
+        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], {
+          cwd,
+          stdio: 'ignore',
+        });
+      git(['init', '-q'], main);
+      fs.writeFileSync(path.join(main, 'README.md'), 'x\n');
+      git(['add', 'README.md'], main);
+      git(['commit', '-q', '-m', 'init'], main);
+      const linked = path.join(tmpDir, 'linked');
+      git(['worktree', 'add', '-q', '-b', 'topic', linked], main);
+      const shared = path.join(tmpDir, 'shared-hooks');
+      git(['config', 'core.hooksPath', shared], main);
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        expect(await installHooksNonInteractive(linked)).toBeNull();
+        expect(fs.existsSync(path.join(shared, 'pre-push'))).toBe(false);
+        expect(sharedHooksJudgment(linked, shared).unanswered).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
 
   it('scrubs the same git location variables core does', async () => {
     const { envWithoutGitLocation } = await import('@mmnto/totem');
