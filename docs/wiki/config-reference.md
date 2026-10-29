@@ -231,7 +231,7 @@ Optional; `'block'` or `'advisory'` (mmnto-ai/totem#2771). It decides what `tote
 
 - **`'block'`**: the gate exits its derived state — `3` owed with no fresh deposit, `2` could not derive — at EVERY tier, so the managed pre-push hook refuses a legs-owed push on a standard-tier install too, while the spec-evidence and shield gates stay at the repo's tier. This is the per-arm shape the cohort asked for: one gate armed without arming all three.
 - **`'advisory'`**: every derived gate state exits `0` at every tier, the strict one included, and in an armed agent shell (a failure before the derivation — an unloadable config — still exits non-zero).
-- **Unset**: the tier-derived behaviour — the strict tier and an armed agent shell (`hooks.agentArming: 'strict'`, below) block, the other tiers print the same lines and pass. Nothing changes on upgrade.
+- **Unset**: the tier-derived behaviour — the strict tier and an armed agent shell (`hooks.agentArming: 'strict'`, below) block, the other tiers print the same lines and pass. An upgrade changes nothing for a declared tier; a standard-tier repository whose agent shells blocked by the markers alone needs `hooks.agentArming: 'strict'` declared and its hooks re-rendered for them to block again, or `'block'` here to arm this one gate for every shell.
 
 It is read at run time by the gate itself, like the globs, so setting it needs no `totem hook install --force`. When it is set the gate prints one extra line under either tier — `[Totem] legs: hooks.legsOwed.enforce = block` — so a block on a standard-tier install names the key that caused it, and a strict install softened to advisory says so too.
 
