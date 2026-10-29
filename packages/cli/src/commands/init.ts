@@ -1491,6 +1491,51 @@ export function resolveToolSelection(answer: string): 'all' | 'none' | 'select' 
   return 'all';
 }
 
+/** The one prompt `totem init` raises for the arming key (mmnto-ai/totem#3130). */
+export const AGENT_ARMING_PROMPT =
+  '\nArm the strict tier in AI-agent shells? A human keeps the standard tier; a shell carrying an agent marker (Claude Code, Cursor, Antigravity, or any seat exporting TOTEM_SELF_AGENT) gets the spec-evidence, legs and review gates. Writes hooks.agentArming: strict (y/N): ';
+
+/**
+ * The `hooks` keys a `totem init` run declares into the config it GENERATES
+ * (mmnto-ai/totem#3130), decided in one place so the decision is testable with a
+ * fake readline. `--strict` declares the tier and makes every shell strict, so an
+ * arming flag beside it is reported as moot and not written; `--agent-arming`
+ * declares the arming without the prompt; `--bare` installs no git hooks, so it
+ * never asks; an interactive run asks once, and only `y` or `yes` (trimmed, any
+ * case) declares the key; a non-interactive run leaves it unset and says so.
+ * `say` is where the two disclosure lines go (init's dim log).
+ */
+export async function resolveInitHooksKeys(
+  options: { strict?: boolean; agentArming?: boolean; bare?: boolean; interactive: boolean },
+  rl: { question: (prompt: string) => Promise<string> },
+  say: (line: string) => void,
+): Promise<{ tier?: 'strict'; agentArming?: 'strict' }> {
+  const keys: { tier?: 'strict'; agentArming?: 'strict' } = {};
+  if (options.strict) {
+    keys.tier = 'strict';
+    if (options.agentArming) {
+      say(
+        '--agent-arming is moot under --strict (every shell is strict); hooks.agentArming is not written.',
+      );
+    }
+    return keys;
+  }
+  if (options.agentArming) {
+    keys.agentArming = 'strict';
+    return keys;
+  }
+  if (options.bare) return keys;
+  if (options.interactive) {
+    const answer = (await rl.question(AGENT_ARMING_PROMPT)).trim().toLowerCase();
+    if (answer === 'y' || answer === 'yes') keys.agentArming = 'strict';
+    return keys;
+  }
+  say(
+    'Non-interactive mode — hooks.agentArming left unset (an AI-agent shell follows the pinned tier); pass --agent-arming to arm it.',
+  );
+  return keys;
+}
+
 export async function initCommand(options?: {
   bare?: boolean;
   pilot?: boolean;
@@ -1835,34 +1880,19 @@ export default {
       // branch used before anchored on a closing brace at END of file, and the
       // generated totem.config.ts ends with `export default config;`, so `--strict`
       // was a measured silent no-op there (the `--pilot` shape, mmnto-ai/totem#3083).
-      const hooksKeys: { tier?: 'strict'; agentArming?: 'strict' } = {};
-      if (options?.strict) {
-        hooksKeys.tier = 'strict';
-        if (options?.agentArming) {
-          log.dim(
-            'Totem',
-            '--agent-arming is moot under --strict (every shell is strict); hooks.agentArming is not written.',
-          );
-        }
-      } else if (options?.agentArming) {
-        hooksKeys.agentArming = 'strict';
-      } else if (!options?.bare) {
-        // Asked here, where the config is generated, because the git hooks render
-        // from the config init writes BEFORE they are installed (mmnto-ai/totem#2692
-        // C1/C7): an answer given after the write would not reach this run's hooks.
-        if (interactive) {
-          const answer = await rl.question(
-            '\nArm the strict tier in AI-agent shells? A human keeps the standard tier; a shell carrying an agent marker (Claude Code, Cursor, Antigravity, or any seat exporting TOTEM_SELF_AGENT) gets the spec-evidence, legs and review gates. Writes hooks.agentArming: strict (y/N): ',
-          );
-          const normalised = answer.trim().toLowerCase();
-          if (normalised === 'y' || normalised === 'yes') hooksKeys.agentArming = 'strict';
-        } else {
-          log.dim(
-            'Totem',
-            'Non-interactive mode — hooks.agentArming left unset (an AI-agent shell follows the pinned tier); pass --agent-arming to arm it.',
-          );
-        }
-      }
+      // Asked here, where the config is generated, because the git hooks render
+      // from the config init writes BEFORE they are installed (mmnto-ai/totem#2692
+      // C1/C7): an answer given after the write would not reach this run's hooks.
+      const hooksKeys = await resolveInitHooksKeys(
+        {
+          strict: options?.strict,
+          agentArming: options?.agentArming,
+          bare: options?.bare,
+          interactive,
+        },
+        rl,
+        (line) => log.dim('Totem', line),
+      );
       if (hooksKeys.tier !== undefined || hooksKeys.agentArming !== undefined) {
         const { injectHooksKeys } = await import('./init-templates.js');
         const injected = injectHooksKeys(finalConfigContent, configFilename, hooksKeys);

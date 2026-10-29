@@ -55,6 +55,7 @@ import {
 } from '../assets/universal-baseline.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
+  AGENT_ARMING_PROMPT,
   buildNpxCommand,
   deriveProjectName,
   detectEmbeddingTier,
@@ -69,6 +70,7 @@ import {
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
+  resolveInitHooksKeys,
   resolveToolSelection,
   scaffoldAgentsFloor,
   scaffoldClaudeSessionStart,
@@ -1696,6 +1698,90 @@ describe('initCommand --global', () => {
     expect(configContent).not.toContain('embedding');
     expect(configContent).toContain('targets:');
     expect(configContent).toContain("glob: '.totem/lessons/*.md'");
+  });
+});
+
+// ─── resolveInitHooksKeys (mmnto-ai/totem#3130) ──────────
+//
+// The arming question's decision, driven with a fake readline: the one place init
+// decides which `hooks` keys it declares, so the prompt's y/n paths are pinned
+// without driving the whole interactive init.
+
+describe('resolveInitHooksKeys', () => {
+  function fakeRl(answers: string[]): {
+    rl: { question: (prompt: string) => Promise<string> };
+    prompts: string[];
+  } {
+    const prompts: string[] = [];
+    return {
+      prompts,
+      rl: {
+        question: async (prompt: string) => {
+          prompts.push(prompt);
+          const next = answers.shift();
+          if (next === undefined) throw new Error('a prompt was raised with no answer queued');
+          return next;
+        },
+      },
+    };
+  }
+
+  it('y and yes (trimmed, any case) declare the key; n, no, an empty answer and anything else declare none', async () => {
+    for (const answer of ['y', 'Y', ' yes ', 'YES']) {
+      const { rl, prompts } = fakeRl([answer]);
+      const said: string[] = [];
+      expect(
+        await resolveInitHooksKeys({ interactive: true }, rl, (line) => said.push(line)),
+      ).toEqual({ agentArming: 'strict' });
+      expect(prompts).toEqual([AGENT_ARMING_PROMPT]);
+      expect(said).toEqual([]);
+    }
+    for (const answer of ['n', 'N', 'no', '', '   ', 'yep', 'true']) {
+      const { rl, prompts } = fakeRl([answer]);
+      expect(await resolveInitHooksKeys({ interactive: true }, rl, () => {})).toEqual({});
+      expect(prompts).toEqual([AGENT_ARMING_PROMPT]);
+    }
+  });
+
+  it('--strict declares the tier, never prompts, and reports a passed --agent-arming as moot', async () => {
+    const { rl, prompts } = fakeRl([]);
+    const said: string[] = [];
+    expect(
+      await resolveInitHooksKeys({ strict: true, interactive: true }, rl, (line) =>
+        said.push(line),
+      ),
+    ).toEqual({ tier: 'strict' });
+    expect(prompts).toEqual([]);
+    expect(said).toEqual([]);
+    expect(
+      await resolveInitHooksKeys(
+        { strict: true, agentArming: true, interactive: true },
+        rl,
+        (line) => said.push(line),
+      ),
+    ).toEqual({ tier: 'strict' });
+    expect(said.join('\n')).toContain('--agent-arming is moot under --strict');
+    expect(prompts).toEqual([]);
+  });
+
+  it('--agent-arming declares the key without the prompt; --bare never asks; non-interactive leaves it unset and says so', async () => {
+    const { rl, prompts } = fakeRl([]);
+    const said: string[] = [];
+    expect(
+      await resolveInitHooksKeys({ agentArming: true, interactive: true }, rl, (line) =>
+        said.push(line),
+      ),
+    ).toEqual({ agentArming: 'strict' });
+    expect(
+      await resolveInitHooksKeys({ bare: true, interactive: true }, rl, (line) => said.push(line)),
+    ).toEqual({});
+    expect(prompts).toEqual([]);
+    expect(said).toEqual([]);
+    expect(
+      await resolveInitHooksKeys({ interactive: false }, rl, (line) => said.push(line)),
+    ).toEqual({});
+    expect(said.join('\n')).toContain('hooks.agentArming left unset');
+    expect(prompts).toEqual([]);
   });
 });
 
