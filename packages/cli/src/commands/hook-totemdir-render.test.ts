@@ -406,6 +406,11 @@ describe('resolveHookRenderOptions — the one config→render seam (C1)', () =>
     expect(legsOnly.tier).toBe('standard');
     expect(legsOnly.tierPinned).toBeUndefined();
 
+    writeConfig(`${BASE_TARGETS}hooks:\n  shield:\n    enforce: advisory\n`);
+    const shieldOnly = await resolveHookRenderOptions(tmpDir);
+    expect(shieldOnly.tier).toBe('standard');
+    expect(shieldOnly.tierPinned).toBeUndefined();
+
     writeConfig(`${BASE_TARGETS}hooks:\n  tier: standard\n  agentArming: strict\n`);
     const declared = await resolveHookRenderOptions(tmpDir);
     expect(declared.tier).toBe('standard');

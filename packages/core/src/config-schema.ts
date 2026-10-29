@@ -756,7 +756,11 @@ export const TotemConfigSchema = z.object({
        *  `legsOwed`, `shield` or `agentArming` PINNED the tier to standard, and a
        *  bare or forced re-render then silently downgraded a hook installed with
        *  `--strict` — the downgrade mmnto-ai/totem#2753 ruled against. Only a
-       *  declared tier pins one; "nobody said" stays representable. */
+       *  declared tier pins one; "nobody said" stays representable. It follows
+       *  that stepping DOWN from a declared `'strict'` is a declaration too: write
+       *  `'standard'` (or install with `--standard`); deleting the line and
+       *  re-rendering, with or without `--force`, leaves the installed hooks at
+       *  the tier they declare. */
       tier: z.enum(['strict', 'standard']).optional(),
 
       /** Whether an AI-agent shell arms the STRICT tier on a repository whose

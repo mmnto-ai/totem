@@ -144,7 +144,9 @@ export default {
     // The tier rendered INTO the managed hooks at install — re-run
     // `totem hook install --force` after changing it. It governs EVERY shell.
     // Absent means 'standard' and pins nothing: an installed hook keeps its own
-    // tier on a re-render unless a tier is declared here or passed as a flag.
+    // tier on a re-render unless a tier is declared here or passed as a flag. So
+    // stepping a strict hook down is a declaration too — write 'standard' here
+    // or run `totem hook install --standard`; deleting the line keeps it strict.
     tier: 'standard', // 'strict' | 'standard'
 
     // Whether an AI-agent shell arms the STRICT tier on a standard-tier install

@@ -1303,6 +1303,8 @@ describe('hooks.legsOwed.globs — the judgment-dense path floor (mmnto-ai/totem
       { agentArming: 'off' },
       { legsOwed: { enforce: 'block' } },
       { legsOwed: { globs: ['docs/**'] }, agentArming: 'strict' },
+      { shield: { enforce: 'advisory' } },
+      { legsOwed: {}, shield: {} },
     ]) {
       const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, hooks });
       expect(result.success, JSON.stringify(hooks)).toBe(true);

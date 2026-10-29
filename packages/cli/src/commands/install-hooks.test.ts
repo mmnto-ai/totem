@@ -2348,21 +2348,39 @@ describe('installHooksNonInteractive', () => {
     }
     expect(again!.prePush).toBe('overwritten');
 
+    // A FORCED re-render under the same config keeps the tier too: `--force`
+    // rewrites the file whole, but the tier it renders is still "nobody said".
+    const forced = await installHooksNonInteractive(tmpDir, true);
+    expect(forced!.prePush).toBe('overwritten');
+    for (const [hook, marker, end] of [
+      ['pre-commit', TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END],
+      ['pre-push', TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END],
+    ] as const) {
+      expect(
+        declaredHookTier(fs.readFileSync(path.join(hooksDir, hook), 'utf-8'), marker, end),
+        hook,
+      ).toBe('strict');
+    }
+
     // And a block that declares only the legs knob — every cohort config's shape —
-    // pins nothing either (the pre-existing reach of the same defect).
+    // pins nothing either (the pre-existing reach of the same defect). This is also
+    // the "declared strict, then the tier line deleted" transition: the installed
+    // strict survives, so stepping down is a declaration (`tier: standard` below).
     fs.writeFileSync(
       path.join(tmpDir, 'totem.yaml'),
       'targets:\n  - glob: "docs/*.md"\n    type: lesson\n    strategy: markdown-heading\nhooks:\n  legsOwed:\n    enforce: block\n',
       'utf-8',
     );
     await installHooksNonInteractive(tmpDir);
-    expect(
-      declaredHookTier(
-        fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8'),
-        TOTEM_PREPUSH_MARKER,
-        TOTEM_PREPUSH_END,
-      ),
-    ).toBe('strict');
+    for (const [hook, marker, end] of [
+      ['pre-commit', TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END],
+      ['pre-push', TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END],
+    ] as const) {
+      expect(
+        declaredHookTier(fs.readFileSync(path.join(hooksDir, hook), 'utf-8'), marker, end),
+        hook,
+      ).toBe('strict');
+    }
 
     // A DECLARED standard tier still pins — the repo asked for it.
     fs.writeFileSync(

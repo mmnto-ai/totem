@@ -1233,8 +1233,14 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             // --force so the remediation actually repairs a stale hook: bare
             // `totem hook install` only drift-repairs a totem-OWNED whole file, but
             // --force is the always-correct instruction for any drift class incl. a
-            // user hook with an appended totem block (mmnto-ai/totem#2138).
-            installCommand = 'totem hook install --force';
+            // user hook with an appended totem block (mmnto-ai/totem#2138). One class
+            // it does not clear (mmnto-ai/totem#3130): this canonical is rendered at
+            // the CONFIGURED tier, standard when none is declared, while the installer
+            // keeps a `--strict`-installed hook strict under a tier-less block — so
+            // the line says how to step the tier down; aligning this row's tier axis
+            // with the Git Hooks row's (the installed tier, A10) is a follow-up.
+            installCommand =
+              'totem hook install --force (a hook installed with --strict under a config that declares no hooks.tier re-renders strict and stays drift here: declare hooks.tier, or pass --standard, to step it down)';
           } else if (c.id === 'session-start-orientation') {
             generatedArtifacts = sessionStartArtifactsFor(gitRoot, sessionStartTemplates);
             artifactLabel = 'SessionStart hook';
