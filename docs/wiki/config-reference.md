@@ -142,8 +142,14 @@ export default {
   // Enforcement hook configuration.
   hooks: {
     // The tier rendered INTO the managed hooks at install — re-run
-    // `totem hook install --force` after changing it.
+    // `totem hook install --force` after changing it. It governs EVERY shell.
     tier: 'standard', // 'strict' | 'standard'
+
+    // Whether an AI-agent shell arms the STRICT tier on a standard-tier install
+    // (mmnto-ai/totem#3130): 'strict' | 'off'; absent means off. Rendered into
+    // the two enforcement hooks at install like `tier`, so re-run
+    // `totem hook install --force` after changing it. See the section below.
+    agentArming: 'off',
 
     // The judgment-dense path floor `totem legs gate` judges a push against
     // (mmnto-ai/totem#2698). See the section below.
@@ -220,8 +226,8 @@ docs/wiki/**
 Optional; `'block'` or `'advisory'` (mmnto-ai/totem#2771). It decides what `totem legs gate` **exits** — never what it prints — and it wins over the hook tier in both directions:
 
 - **`'block'`**: the gate exits its derived state — `3` owed with no fresh deposit, `2` could not derive — at EVERY tier, so the managed pre-push hook refuses a legs-owed push on a standard-tier install too, while the spec-evidence and shield gates stay at the repo's tier. This is the per-arm shape the cohort asked for: one gate armed without arming all three.
-- **`'advisory'`**: every derived gate state exits `0` at every tier, the strict one included, and on agent seats (a failure before the derivation — an unloadable config — still exits non-zero).
-- **Unset**: the tier-derived behaviour — the strict tier and agent seats block, the other tiers print the same lines and pass. Nothing changes on upgrade.
+- **`'advisory'`**: every derived gate state exits `0` at every tier, the strict one included, and in an armed agent shell (a failure before the derivation — an unloadable config — still exits non-zero).
+- **Unset**: the tier-derived behaviour — the strict tier and an armed agent shell (`hooks.agentArming: 'strict'`, below) block, the other tiers print the same lines and pass. Nothing changes on upgrade.
 
 It is read at run time by the gate itself, like the globs, so setting it needs no `totem hook install --force`. When it is set the gate prints one extra line under either tier — `[Totem] legs: hooks.legsOwed.enforce = block` — so a block on a standard-tier install names the key that caused it, and a strict install softened to advisory says so too.
 
@@ -231,16 +237,28 @@ It is read at run time by the gate itself, like the globs, so setting it needs n
 
 ## The Shield Exit Knob (`hooks.shield.enforce`)
 
-Optional; `'block'`, `'advisory'` or `'advisory-when-legged'` (mmnto-ai/totem#2525). It decides what a `totem review --gate` run **exits** when it fails — the run that the managed pre-push hook makes on the strict tier and on agent seats. It does not change a lane, a prompt, a verdict or the reviewed-content stamp; it changes the exit status and adds one line, plus — under `advisory-when-legged` only — the legs gate's own corrupt-deposit sensor rows, which the derivation prints rather than drops.
+Optional; `'block'`, `'advisory'` or `'advisory-when-legged'` (mmnto-ai/totem#2525). It decides what a `totem review --gate` run **exits** when it fails — the run that the managed pre-push hook makes on the strict tier and in an armed agent shell. It does not change a lane, a prompt, a verdict or the reviewed-content stamp; it changes the exit status and adds one line, plus — under `advisory-when-legged` only — the legs gate's own corrupt-deposit sensor rows, which the derivation prints rather than drops.
 
 - **`'advisory'`**: every failure raised after the config is loaded exits `0`. The run prints the same error text it prints today, then `[Totem] shield: hooks.shield.enforce = advisory`. That includes a lane's own config-class refusal such as `No model specified`, not only a round in which no lane completed.
 - **`'advisory-when-legged'`**: the same softening, applied only when `totem legs gate` derives evidence for HEAD — a legs-owed push whose deposit the legs gate accepts. The line names the deposit and its coverage: `[Totem] shield: hooks.shield.enforce = advisory-when-legged (legs deposit <sha8> covers K/N)`. A push that is not legs-owed, an owed push with no fresh deposit, and a legs derivation that fails all keep the block, and the line says which. The legs gate reads no deposit for a push that is not legs-owed, so a repo that wants code pushes covered widens `hooks.legsOwed.globs`.
-- **`'block'`**: the explicit spelling of the default — a failure exits non-zero — plus the line `[Totem] shield: hooks.shield.enforce = block`. It does not arm a standard-tier install: the managed hook runs the shield only on the strict tier and agent seats, and this knob does not change that (unlike `hooks.legsOwed.enforce: 'block'`).
+- **`'block'`**: the explicit spelling of the default — a failure exits non-zero — plus the line `[Totem] shield: hooks.shield.enforce = block`. It does not arm a standard-tier install: the managed hook runs the shield only on the strict tier and in an armed agent shell, and this knob does not change that (unlike `hooks.legsOwed.enforce: 'block'`).
 - **Unset**: a `--gate` run prints and exits as before, with no extra line.
 
 It is read at run time by `totem review --gate` itself, so setting it needs no `totem hook install --force`, and the rendered hook is unchanged. The line prints on a passing gate run too, so a reader can see which key is in force. On a run that still fails (`'block'`, or `'advisory-when-legged'` without evidence) the knob line prints before the CLI's error; on a softened run the error comes first and the knob line last.
 
 **What stays hard.** A failure raised before the config is loaded — a contradictory flag such as `--gate` with `--fail-on`, a config that does not load, or a `hooks.shield.enforce` value outside the three — exits non-zero under every value. A bare `totem review` (no `--gate`) does not read the knob. The `doctor --strict` step of the same hook block is not affected.
+
+## The Agent Arming Key (`hooks.agentArming`)
+
+Optional; `'off'` or `'strict'`, absent meaning `off` (mmnto-ai/totem#3130, designed with mmnto-ai/totem#3042). It decides whether an **AI-agent shell** arms the strict tier on a repository whose `hooks.tier` is `standard`. The tier governs every shell, a human's and an agent's alike; this key is the one place an agent's shell is told apart.
+
+- **`'strict'`**: a shell carrying an agent marker runs the strict arms — the spec-evidence gate at commit; `doctor --strict`, the review gate and the blocking legs gate at push — while a human's shell keeps the pinned tier. The markers, in the order the hook tests them: `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` (what a live Claude Code shell exports), `CLAUDE_CODE_AGENT` and `CLAUDE_VERSION` (explicit exports), `CURSOR_TRACE_ID` (Cursor), `TOTEM_SELF_AGENT` (any seat that declares itself per shell — the Kimi, Codex and Gemini CLI vehicles export no variable of their own, so this is the name that reaches them) and `ANTIGRAVITY_AGENT` (Antigravity). `GEMINI_API_KEY` is deliberately not one: humans export it for the embedding provider. The markers read the shell, not the person: `TOTEM_SELF_AGENT` set at user or machine scope (against the mmnto-ai/totem#2629 per-shell ruling) marks a human's shells too, and the Seat Identity row of `totem doctor` warns on that scope.
+- **`'off'`**: every shell follows the pinned tier. A declared `off` and an absent key render the same hook; they differ only in what `totem doctor` says.
+- **Unset**: `off`, and deliberately not a schema default, so the doctor's **Agent Arming** row can tell an omission from a decision: it warns when the key is unset on a repository with seats registered under `.totem/orchestration/` (whose agents' commits and pushes therefore run the standard arm), passes naming the value when it is declared, and passes when it is unset and no seat is registered.
+
+**Rendered, like `tier`.** The installer writes the value into the pre-commit and pre-push hooks as `TOTEM_HOOK_AGENT_ARMING`, on the line under `TOTEM_HOOK_TIER`, and the hook's agent-detection block runs its marker test only when that line reads `strict`. So an installed hook changes only when it is re-rendered — a bare `totem hook install` (or the `prepare` wrapper's install) re-renders a totem-owned block, `totem hook install --force` rewrites a hook whole — and the **Git Hooks** row of `totem doctor`, and `doctor --parity`, read a hook rendered at the other value as drift with the shape's re-render as the remedy. Before this key the markers alone armed the strict tier on every install: a repository that relied on that sets `hooks.agentArming: 'strict'` in its tracked config before it re-renders on the cut that carries this.
+
+**Declared once.** `totem init` asks the question at config generation on a fresh, non-bare, non-`--strict` interactive run; `totem init --agent-arming` answers it without the prompt; a non-interactive run leaves the key unset and says so. Under `--strict` every shell is strict, so the question is skipped. There is no `totem hook install` flag for it: a tracked file is where a repository declares it. A repository that wants every shell strict sets `hooks.tier: 'strict'` instead.
 
 ## The Action Policy File (`.totem/action-policy.json`)
 

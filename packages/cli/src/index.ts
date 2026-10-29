@@ -100,7 +100,14 @@ program
     '--pilot',
     'Pilot tier for the action gates installed with --gates in this run (a deny prints and exits 0; a gate that cannot be evaluated still blocks). A generated yaml or toml config gains pilot: true, which nothing reads yet (a generated totem.config.ts does not take it today, mmnto-ai/totem#3083); an existing config is left as it is; the git hooks are NOT affected (mmnto-ai/totem#2815)',
   )
-  .option('--strict', 'Use strict enforcement tier (spec-required + review gate for agents)')
+  .option(
+    '--strict',
+    'Use the strict enforcement tier for every shell (spec-required + review gate); an AI-agent shell alone is armed with --agent-arming (mmnto-ai/totem#3130)',
+  )
+  .option(
+    '--agent-arming',
+    'Declare hooks.agentArming: strict in the generated config: an AI-agent shell (Claude Code, Cursor, Antigravity, any seat exporting TOTEM_SELF_AGENT) arms the strict tier while a human keeps the pinned tier (off by default; moot under --strict; mmnto-ai/totem#3130)',
+  )
   .option('--global', 'Create a personal profile in ~/.totem/ for use across all projects')
   .option(
     '--force-skill-refresh',
@@ -123,6 +130,7 @@ program
       bare?: boolean;
       pilot?: boolean;
       strict?: boolean;
+      agentArming?: boolean;
       global?: boolean;
       forceSkillRefresh?: boolean;
       gates?: string;
@@ -134,6 +142,7 @@ program
           bare: options.bare,
           pilot: options.pilot,
           strict: options.strict,
+          agentArming: options.agentArming,
           global: options.global,
           forceSkillRefresh: options.forceSkillRefresh,
           gates: options.gates,

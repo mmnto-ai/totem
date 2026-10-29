@@ -481,6 +481,41 @@ export function getFallbackCommand(cwd: string): string {
 export const DEFAULT_TOTEM_DIR = '.totem';
 
 /**
+ * Whether an AI-agent shell arms the strict tier on a standard-tier install
+ * (config `hooks.agentArming`, mmnto-ai/totem#3130). Rendered into the two
+ * enforcement hooks as `TOTEM_HOOK_AGENT_ARMING`.
+ */
+export type AgentArming = 'off' | 'strict';
+
+/** The arming every hook renders when the repo configures none: the pinned tier
+ *  governs every shell (the opt-in ruling on mmnto-ai/totem#3130). */
+export const DEFAULT_AGENT_ARMING: AgentArming = 'off';
+
+/**
+ * The env names that mark an AI-agent shell, in the order the hook tests them.
+ * Claude Code exports `CLAUDECODE=1` and `CLAUDE_CODE_ENTRYPOINT` into every tool
+ * shell (mmnto-ai/totem#2706); `CLAUDE_CODE_AGENT` and `CLAUDE_VERSION` stay for
+ * explicit exports; `CURSOR_TRACE_ID` is Cursor's; `TOTEM_SELF_AGENT` is the seat
+ * identity every cohort seat exports per shell (the mmnto-ai/totem#2629 scope
+ * ruling), which reaches the Kimi, Codex and Gemini CLI seats that export no
+ * vehicle variable of their own (four measurements on mmnto-ai/totem#3042);
+ * `ANTIGRAVITY_AGENT` is the one vehicle variable a seat reported from its own
+ * shell there (2026-10-10; that seat's attestation, not a measurement from
+ * another, and harmless to carry: an extra name only widens the arm in a
+ * repository that opted in). `GEMINI_API_KEY` is deliberately NOT a marker:
+ * human developers export it for the embedding provider.
+ */
+export const AGENT_SHELL_MARKERS: readonly string[] = [
+  'CLAUDECODE',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_AGENT',
+  'CLAUDE_VERSION',
+  'CURSOR_TRACE_ID',
+  'TOTEM_SELF_AGENT',
+  'ANTIGRAVITY_AGENT',
+];
+
+/**
  * Everything the four hook templates render FROM.
  *
  * Every field is REQUIRED on purpose. A defaulted parameter is exactly how a
@@ -492,6 +527,11 @@ export const DEFAULT_TOTEM_DIR = '.totem';
 export interface HookRenderOptions {
   /** Enforcement tier the hook is generated at. */
   tier: 'strict' | 'standard';
+  /** Whether an agent shell arms the strict tier on a standard-tier hook
+   *  (config `hooks.agentArming`; absent ⇒ {@link DEFAULT_AGENT_ARMING}). Read
+   *  by the two enforcement hooks; the post-merge and post-checkout hooks carry
+   *  no tier and ignore it. */
+  agentArming: AgentArming;
   /** Repo-relative Totem directory the hook must name (config `totemDir`). */
   totemDir: string;
   /** Package-manager fallback invocation for the runtime resolve block. */
@@ -665,6 +705,7 @@ export async function resolveHookRenderOptions(
   const defaults: ResolvedHookRenderOptions = {
     tier: flags?.tier ?? 'standard',
     ...(flags?.tier === undefined ? {} : { tierPinned: true as const }),
+    agentArming: DEFAULT_AGENT_ARMING,
     totemDir: DEFAULT_TOTEM_DIR,
     fallbackCmd,
   };
@@ -687,7 +728,7 @@ export async function resolveHookRenderOptions(
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.error(
-      `[Totem] Could not load ${configPath} (${reason.split('\n')[0]}) — the git hooks are rendered at the defaults (totemDir '${DEFAULT_TOTEM_DIR}'); the tier follows an explicit flag, else the tier each installed hook declares, else 'standard'; fix the config and re-run \`totem hook install --force\`.`,
+      `[Totem] Could not load ${configPath} (${reason.split('\n')[0]}) — the git hooks are rendered at the defaults (totemDir '${DEFAULT_TOTEM_DIR}', agent arming '${DEFAULT_AGENT_ARMING}'); the tier follows an explicit flag, else the tier each installed hook declares, else 'standard'; fix the config and re-run \`totem hook install --force\`.`,
     );
     return { ...defaults, configError: reason };
   }
@@ -695,6 +736,11 @@ export async function resolveHookRenderOptions(
   const totemDir = isGlobalConfigPath(configPath)
     ? DEFAULT_TOTEM_DIR
     : (config.totemDir ?? DEFAULT_TOTEM_DIR);
+  // Repo-local only, like `totemDir`: the arming is a property of the repository
+  // whose hooks run, never of the machine's global profile (mmnto-ai/totem#3130).
+  const agentArming: AgentArming = isGlobalConfigPath(configPath)
+    ? DEFAULT_AGENT_ARMING
+    : (config.hooks?.agentArming ?? DEFAULT_AGENT_ARMING);
   // The CLI-layer form of the refusal: a TotemError with a recovery hint (the
   // sync builders keep the plain-Error backstop, `assertRenderableTotemDir`).
   const problem = hookTotemDirProblem(totemDir);
@@ -710,6 +756,7 @@ export async function resolveHookRenderOptions(
   return {
     tier: pinned ?? 'standard',
     ...(pinned === undefined ? {} : { tierPinned: true as const }),
+    agentArming,
     totemDir,
     fallbackCmd,
     configPath,
@@ -1160,26 +1207,35 @@ export async function installPostMergeHook(
 // ─── Agent detection snippet (POSIX-compliant) ─────────
 
 /**
- * The env names that mark an AI-agent shell, so the strict arm fires without a
- * `--strict` install (mmnto-ai/totem#2706). Claude Code exports `CLAUDECODE=1`
- * and `CLAUDE_CODE_ENTRYPOINT` (`cli` on every measured seat; any non-empty
- * value arms) into every tool shell; five seat-measurements in five checkouts,
- * four of them named cohort repositories, between 2026-08-30 and 2026-09-13
- * (the issue thread) found no live Claude Code
- * session carrying `CLAUDE_CODE_AGENT` or `CLAUDE_VERSION`, the names the
- * block tested before, so the strict arm was structurally inert on every
- * Claude Code seat in the cohort. The two old
- * names stay so an explicit export keeps working; `CURSOR_TRACE_ID` is Cursor's.
- * `GEMINI_API_KEY` is deliberately NOT a marker: human developers export it
- * for the embedding provider.
+ * The agent-detection block: `is_agent=1` when the shell carries one of
+ * {@link AGENT_SHELL_MARKERS} AND the hook was rendered with
+ * `TOTEM_HOOK_AGENT_ARMING="strict"` (mmnto-ai/totem#3130). Before that ruling
+ * the markers alone armed the strict tier on every install, whatever tier the
+ * repository pinned, and the measured outcome in a consumer was declining the
+ * hooks altogether; now the pinned tier governs every shell unless the
+ * repository opts its agents in. Every downstream arm keeps its one test,
+ * `is_agent = 1 OR TOTEM_HOOK_TIER = strict`, so a `--strict` install still
+ * arms every shell with or without the key. The marker names are rendered from
+ * the one table so the hook, the tests and the reflex clause cannot drift
+ * apart. Claude Code exports `CLAUDECODE=1` and `CLAUDE_CODE_ENTRYPOINT` (`cli`
+ * on every measured seat; any non-empty value arms) into every tool shell
+ * (mmnto-ai/totem#2706: five seat-measurements found no live Claude Code
+ * session carrying `CLAUDE_CODE_AGENT` or `CLAUDE_VERSION`, the names the block
+ * tested before, so the arm was structurally inert until those two were added).
  */
 function buildAgentDetectionBlock(): string {
-  return `# Agent detection — strict enforcement for AI agents (mmnto-ai/totem#2706)
-# Claude Code exports CLAUDECODE=1 and CLAUDE_CODE_ENTRYPOINT into every tool
-# shell; CLAUDE_CODE_AGENT / CLAUDE_VERSION are kept for explicit exports.
+  const test = AGENT_SHELL_MARKERS.map((name) => `[ -n "$${name}" ]`).join(' || ');
+  return `# Agent detection — an AI-agent shell arms the strict tier only when this hook
+# was rendered with hooks.agentArming = strict (mmnto-ai/totem#3130, mmnto-ai/totem#3042);
+# a human's shell and an unarmed repository follow TOTEM_HOOK_TIER. Markers:
+# CLAUDECODE / CLAUDE_CODE_ENTRYPOINT (Claude Code), CLAUDE_CODE_AGENT /
+# CLAUDE_VERSION (explicit exports), CURSOR_TRACE_ID (Cursor), TOTEM_SELF_AGENT
+# (any seat declaring itself per shell), ANTIGRAVITY_AGENT (Antigravity).
 is_agent=0
-if [ -n "$CLAUDECODE" ] || [ -n "$CLAUDE_CODE_ENTRYPOINT" ] || [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
-  is_agent=1
+if [ "$TOTEM_HOOK_AGENT_ARMING" = "strict" ]; then
+  if ${test}; then
+    is_agent=1
+  fi
 fi`;
 }
 
@@ -1187,9 +1243,11 @@ fi`;
 
 export function buildPreCommitHook(options: {
   tier: 'strict' | 'standard';
+  agentArming: AgentArming;
   totemDir: string;
 }): string {
   const effectiveTier = options.tier;
+  const agentArming = options.agentArming;
   const totemDir = options.totemDir;
   assertRenderableTotemDir(totemDir);
   // The run store the strict arm reads, rendered from the CONFIGURED totemDir so
@@ -1586,6 +1644,7 @@ fi`;
 # ${TOTEM_PRECOMMIT_MARKER} — block direct commits to protected branches.
 # Override with: git commit --no-verify
 TOTEM_HOOK_TIER="${effectiveTier}"
+TOTEM_HOOK_AGENT_ARMING="${agentArming}"
 
 ${buildAgentDetectionBlock()}
 
@@ -1604,9 +1663,10 @@ ${strictBlock}
 export function buildPrePushHook(options: {
   fallbackCmd: string;
   tier: 'strict' | 'standard';
+  agentArming: AgentArming;
   totemDir: string;
 }): string {
-  const { fallbackCmd, totemDir } = options;
+  const { fallbackCmd, totemDir, agentArming } = options;
   const effectiveTier = options.tier;
   assertRenderableTotemDir(totemDir);
   // The review-leg floor (mmnto-ai/totem#2698; doctrine `model-tiering.md`
@@ -1723,6 +1783,7 @@ export function buildPrePushHook(options: {
   return `#!/bin/sh
 # ${TOTEM_PREPUSH_MARKER} — stateless enforcement.
 TOTEM_HOOK_TIER="${effectiveTier}"
+TOTEM_HOOK_AGENT_ARMING="${agentArming}"
 
 ${buildAgentDetectionBlock()}
 

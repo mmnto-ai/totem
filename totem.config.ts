@@ -98,6 +98,13 @@ const config: TotemConfig = {
   // the same path — `README.md` and `.claude/**` are in `ignorePatterns` for
   // INDEX purposes, and index exclusion is not a waiver of the review-leg floor.
   hooks: {
+    // The pinned tier stays standard for a human's shell; an AI-agent shell (a
+    // seat exporting TOTEM_SELF_AGENT, a Claude Code or Cursor shell) arms the
+    // strict tier — the spec-evidence gate at commit, doctor --strict, the review
+    // gate and the blocking legs gate at push. Rendered into tools/pre-commit and
+    // tools/pre-push (tools-hook-parity.test.ts pins the bytes), so a change here
+    // regenerates both (mmnto-ai/totem#3130).
+    agentArming: 'strict',
     legsOwed: {
       globs: [
         'doctrine/**',
