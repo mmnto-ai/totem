@@ -1,13 +1,19 @@
 #!/bin/sh
 # [totem] pre-push hook — stateless enforcement.
 TOTEM_HOOK_TIER="standard"
+TOTEM_HOOK_AGENT_ARMING="strict"
 
-# Agent detection — strict enforcement for AI agents (mmnto-ai/totem#2706)
-# Claude Code exports CLAUDECODE=1 and CLAUDE_CODE_ENTRYPOINT into every tool
-# shell; CLAUDE_CODE_AGENT / CLAUDE_VERSION are kept for explicit exports.
+# Agent detection — an AI-agent shell arms the strict tier only when this hook
+# was rendered with hooks.agentArming = strict (mmnto-ai/totem#3130, mmnto-ai/totem#3042);
+# a human's shell and an unarmed repository follow TOTEM_HOOK_TIER. Markers:
+# CLAUDECODE / CLAUDE_CODE_ENTRYPOINT (Claude Code), CLAUDE_CODE_AGENT /
+# CLAUDE_VERSION (explicit exports), CURSOR_TRACE_ID (Cursor), TOTEM_SELF_AGENT
+# (any seat declaring itself per shell), ANTIGRAVITY_AGENT (Antigravity).
 is_agent=0
-if [ -n "$CLAUDECODE" ] || [ -n "$CLAUDE_CODE_ENTRYPOINT" ] || [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
-  is_agent=1
+if [ "$TOTEM_HOOK_AGENT_ARMING" = "strict" ]; then
+  if [ -n "$CLAUDECODE" ] || [ -n "$CLAUDE_CODE_ENTRYPOINT" ] || [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ] || [ -n "$TOTEM_SELF_AGENT" ] || [ -n "$ANTIGRAVITY_AGENT" ]; then
+    is_agent=1
+  fi
 fi
 
 # Resolve totem — prefer the pinned / in-tree build over a volatile ambient global

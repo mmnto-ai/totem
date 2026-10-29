@@ -930,9 +930,15 @@ function writeGitHook(name: string, content: string): void {
 /** Install every git hook VERBATIM from the running generator (the clean PASS case). */
 function installCurrentHooks(totemDir = '.totem'): void {
   // mmnto-ai/totem#2692: the builders take a REQUIRED options object, so the
-  // fixture states the tier/totemDir/fallbackCmd the canonical is rendered at —
-  // the same three fields `checkParity` resolves from config.
-  const render = { tier: 'standard' as const, totemDir, fallbackCmd: getFallbackCommand(tmpDir) };
+  // fixture states the tier/agentArming/totemDir/fallbackCmd the canonical is
+  // rendered at — the same fields `checkParity` resolves from config (the arming
+  // since mmnto-ai/totem#3130; a config without the key resolves 'off').
+  const render = {
+    tier: 'standard' as const,
+    agentArming: 'off' as const,
+    totemDir,
+    fallbackCmd: getFallbackCommand(tmpDir),
+  };
   writeGitHook('pre-commit', buildPreCommitHook(render));
   writeGitHook('pre-push', buildPrePushHook(render));
   writeGitHook('post-merge', buildHookContent(render));
@@ -994,6 +1000,7 @@ describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
       'pre-push',
       buildPrePushHook({
         tier: 'standard',
+        agentArming: 'off',
         totemDir: '.totem',
         fallbackCmd: getFallbackCommand(tmpDir),
       }),
@@ -1002,6 +1009,53 @@ describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
     const { results } = await checkParity(tmpDir);
     const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
     expect(prePush.status).toBe('warn');
+    // The remedy names the forced re-render and, after a shell comment marker so
+    // the command stays copy-paste safe, how to step a strict hook down under a
+    // tier-less block, the one class --force does not clear (mmnto-ai/totem#3130).
+    expect(prePush.remediation).toContain('totem hook install --force  # ');
+    expect(prePush.remediation).toContain(
+      'declare hooks.tier, or pass --standard, to step it down',
+    );
+  });
+
+  it('WARN — arming drift: an unarmed hook under a repo configured hooks.agentArming: strict (mmnto-ai/totem#3130)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\nhooks:\n  agentArming: strict\n`);
+    writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
+    // Install the hook rendered OFF (what a config without the key renders), but
+    // the repo now declares strict arming → drift; the canonical carries the key.
+    writeGitHook(
+      'pre-push',
+      buildPrePushHook({
+        tier: 'standard',
+        agentArming: 'off',
+        totemDir: '.totem',
+        fallbackCmd: getFallbackCommand(tmpDir),
+      }),
+    );
+
+    const { results } = await checkParity(tmpDir);
+    const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
+    expect(prePush.status).toBe('warn');
+    expect(prePush.message).toMatch(/drift/i);
+  });
+
+  it('PASS — a hook rendered at the configured arming is current (mmnto-ai/totem#3130)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\nhooks:\n  agentArming: strict\n`);
+    writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
+    const render = {
+      tier: 'standard' as const,
+      agentArming: 'strict' as const,
+      totemDir: '.totem',
+      fallbackCmd: getFallbackCommand(tmpDir),
+    };
+    writeGitHook('pre-commit', buildPreCommitHook(render));
+    writeGitHook('pre-push', buildPrePushHook(render));
+    writeGitHook('post-merge', buildHookContent(render));
+    writeGitHook('post-checkout', buildPostCheckoutHookContent(render));
+
+    const { results } = await checkParity(tmpDir);
+    const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
+    expect(prePush.status).toBe('pass');
   });
 
   it('a blocking git-hooks drift tags the contract id ONCE (the --strict promotion seam)', async () => {

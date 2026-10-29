@@ -55,6 +55,7 @@ import {
 } from '../assets/universal-baseline.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
+  AGENT_ARMING_PROMPT,
   buildNpxCommand,
   deriveProjectName,
   detectEmbeddingTier,
@@ -69,6 +70,7 @@ import {
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
+  resolveInitHooksKeys,
   resolveToolSelection,
   scaffoldAgentsFloor,
   scaffoldClaudeSessionStart,
@@ -95,6 +97,7 @@ import {
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   generateConfigForFormat,
+  injectHooksKeys,
   renderAgentsFloorScaffold,
   REVIEW_LOOP_SKILL_CONTENT,
   REVIEW_REPLY_SKILL_CONTENT,
@@ -1547,6 +1550,80 @@ describe('generateConfigForFormat', () => {
   });
 });
 
+// ─── injectHooksKeys (mmnto-ai/totem#3130) ──────────────
+
+describe('injectHooksKeys', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-inject-hooks-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const targets: IngestTarget[] = [{ glob: '**/*.py', type: 'code', strategy: 'typescript-ast' }];
+  const TS_WITH_EXPORT = `import type { TotemConfig } from '@mmnto/totem';\n\nconst config: TotemConfig = {\n  targets: [],\n};\n\nexport default config;\n`;
+
+  it('lands INSIDE the generated .ts config object, before the export', () => {
+    const out = injectHooksKeys(TS_WITH_EXPORT, 'totem.config.ts', { agentArming: 'strict' });
+    expect(out.written).toBe(true);
+    expect(out.content).toBe(
+      `import type { TotemConfig } from '@mmnto/totem';\n\nconst config: TotemConfig = {\n  targets: [],\n\n  hooks: { agentArming: 'strict' },\n};\n\nexport default config;\n`,
+    );
+  });
+
+  it('composes the tier and the arming into ONE hooks object, per format', () => {
+    const both = { tier: 'strict' as const, agentArming: 'strict' as const };
+    expect(injectHooksKeys(TS_WITH_EXPORT, 'totem.config.ts', both).content).toContain(
+      "\n\n  hooks: { tier: 'strict', agentArming: 'strict' },\n};\n\nexport default config;\n",
+    );
+    expect(injectHooksKeys('targets: []\n', 'totem.yaml', both).content).toBe(
+      'targets: []\nhooks:\n  tier: strict\n  agentArming: strict\n',
+    );
+    expect(injectHooksKeys('targets = []\n', 'totem.toml', both).content).toBe(
+      'targets = []\n\n[hooks]\ntier = "strict"\nagentArming = "strict"\n',
+    );
+  });
+
+  it('the generated .ts template itself takes the keys — the --strict no-op on .ts is closed', async () => {
+    // Measured before this helper: the generated file ends `};\n\nexport default
+    // config;\n`, and the replace it supersedes anchored on a bare closing brace at
+    // END of file, so `--strict` wrote nothing there (mmnto-ai/totem#3083's shape).
+    const { content, filename } = await generateConfigForFormat('ts', targets, 'none', tmpDir);
+    expect(content.endsWith('};\n\nexport default config;\n')).toBe(true);
+    expect(/\n};\s*$/.test(content)).toBe(false); // the old anchor never matched
+    const out = injectHooksKeys(content, filename, { tier: 'strict' });
+    expect(out.written).toBe(true);
+    expect(out.content).toContain(
+      "\n\n  hooks: { tier: 'strict' },\n};\n\nexport default config;\n",
+    );
+  });
+
+  it('a bare closing-brace tail is the fallback anchor', () => {
+    const out = injectHooksKeys('export default {\n  targets: [],\n};\n', 'totem.config.ts', {
+      agentArming: 'strict',
+    });
+    expect(out.written).toBe(true);
+    expect(out.content).toBe(
+      "export default {\n  targets: [],\n\n  hooks: { agentArming: 'strict' },\n};\n",
+    );
+  });
+
+  it('no keys, or a .ts tail no anchor matches: bytes unchanged and written is false (measured, never asserted)', () => {
+    expect(injectHooksKeys(TS_WITH_EXPORT, 'totem.config.ts', {})).toEqual({
+      content: TS_WITH_EXPORT,
+      written: false,
+    });
+    const odd = 'export default config; // trailing comment\n';
+    expect(injectHooksKeys(odd, 'totem.config.ts', { agentArming: 'strict' })).toEqual({
+      content: odd,
+      written: false,
+    });
+  });
+});
+
 // ─── init --global ──────────────────────────────────
 
 describe('initCommand --global', () => {
@@ -1624,6 +1701,90 @@ describe('initCommand --global', () => {
   });
 });
 
+// ─── resolveInitHooksKeys (mmnto-ai/totem#3130) ──────────
+//
+// The arming question's decision, driven with a fake readline: the one place init
+// decides which `hooks` keys it declares, so the prompt's y/n paths are pinned
+// without driving the whole interactive init.
+
+describe('resolveInitHooksKeys', () => {
+  function fakeRl(answers: string[]): {
+    rl: { question: (prompt: string) => Promise<string> };
+    prompts: string[];
+  } {
+    const prompts: string[] = [];
+    return {
+      prompts,
+      rl: {
+        question: async (prompt: string) => {
+          prompts.push(prompt);
+          const next = answers.shift();
+          if (next === undefined) throw new Error('a prompt was raised with no answer queued');
+          return next;
+        },
+      },
+    };
+  }
+
+  it('y and yes (trimmed, any case) declare the key; n, no, an empty answer and anything else declare none', async () => {
+    for (const answer of ['y', 'Y', ' yes ', 'YES']) {
+      const { rl, prompts } = fakeRl([answer]);
+      const said: string[] = [];
+      expect(
+        await resolveInitHooksKeys({ interactive: true }, rl, (line) => said.push(line)),
+      ).toEqual({ agentArming: 'strict' });
+      expect(prompts).toEqual([AGENT_ARMING_PROMPT]);
+      expect(said).toEqual([]);
+    }
+    for (const answer of ['n', 'N', 'no', '', '   ', 'yep', 'true']) {
+      const { rl, prompts } = fakeRl([answer]);
+      expect(await resolveInitHooksKeys({ interactive: true }, rl, () => {})).toEqual({});
+      expect(prompts).toEqual([AGENT_ARMING_PROMPT]);
+    }
+  });
+
+  it('--strict declares the tier, never prompts, and reports a passed --agent-arming as moot', async () => {
+    const { rl, prompts } = fakeRl([]);
+    const said: string[] = [];
+    expect(
+      await resolveInitHooksKeys({ strict: true, interactive: true }, rl, (line) =>
+        said.push(line),
+      ),
+    ).toEqual({ tier: 'strict' });
+    expect(prompts).toEqual([]);
+    expect(said).toEqual([]);
+    expect(
+      await resolveInitHooksKeys(
+        { strict: true, agentArming: true, interactive: true },
+        rl,
+        (line) => said.push(line),
+      ),
+    ).toEqual({ tier: 'strict' });
+    expect(said.join('\n')).toContain('--agent-arming is moot under --strict');
+    expect(prompts).toEqual([]);
+  });
+
+  it('--agent-arming declares the key without the prompt; --bare never asks; non-interactive leaves it unset and says so', async () => {
+    const { rl, prompts } = fakeRl([]);
+    const said: string[] = [];
+    expect(
+      await resolveInitHooksKeys({ agentArming: true, interactive: true }, rl, (line) =>
+        said.push(line),
+      ),
+    ).toEqual({ agentArming: 'strict' });
+    expect(
+      await resolveInitHooksKeys({ bare: true, interactive: true }, rl, (line) => said.push(line)),
+    ).toEqual({});
+    expect(prompts).toEqual([]);
+    expect(said).toEqual([]);
+    expect(
+      await resolveInitHooksKeys({ interactive: false }, rl, (line) => said.push(line)),
+    ).toEqual({});
+    expect(said.join('\n')).toContain('hooks.agentArming left unset');
+    expect(prompts).toEqual([]);
+  });
+});
+
 describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
   let tmpDir: string;
   let originalCwd: string;
@@ -1687,6 +1848,89 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     expect(output).toContain('(Lite tier)');
     const mcp = JSON.parse(fs.readFileSync(path.join(tmpDir, '.mcp.json'), 'utf-8'));
     expect(mcp.mcpServers.totem).toBeDefined();
+  }, 60000);
+
+  // mmnto-ai/totem#3130: the arming question's three non-interactive shapes, and
+  // the one ordering that matters — the config is written BEFORE the hooks render
+  // from it, so the key the flag declares reaches this run's own pre-push.
+  it('--agent-arming declares hooks.agentArming: strict, and the hooks this run installs carry it', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    spawnSync('git', ['init', '-q'], { cwd: tmpDir });
+
+    await initCommand({ agentArming: true });
+
+    const config = fs.readFileSync(path.join(tmpDir, 'totem.yaml'), 'utf-8');
+    expect(config).toContain('hooks:\n  agentArming: strict\n');
+    expect(config).not.toContain('tier:');
+    const prePush = fs.readFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'), 'utf-8');
+    expect(prePush).toContain('\nTOTEM_HOOK_AGENT_ARMING="strict"\n');
+    expect(prePush).toContain('\nTOTEM_HOOK_TIER="standard"\n');
+  }, 60000);
+
+  it('non-interactive without the flag leaves hooks.agentArming unset, says so, and renders off', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+    spawnSync('git', ['init', '-q'], { cwd: tmpDir });
+
+    await initCommand({});
+
+    expect(fs.readFileSync(path.join(tmpDir, 'totem.yaml'), 'utf-8')).not.toContain('agentArming');
+    expect(stderr.join('\n')).toContain('hooks.agentArming left unset');
+    const prePush = fs.readFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'), 'utf-8');
+    expect(prePush).toContain('\nTOTEM_HOOK_AGENT_ARMING="off"\n');
+  }, 60000);
+
+  it('--strict with --agent-arming writes the tier only and says the arming is moot', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({ strict: true, agentArming: true });
+
+    const config = fs.readFileSync(path.join(tmpDir, 'totem.yaml'), 'utf-8');
+    expect(config).toContain('hooks:\n  tier: strict\n');
+    expect(config).not.toContain('agentArming');
+    expect(stderr.join('\n')).toContain('--agent-arming is moot under --strict');
+  }, 60000);
+
+  // The two `hooks` flags write only into a config this run GENERATES; on an
+  // existing config they say so instead of a silent no-op (the leg's finding on
+  // mmnto-ai/totem#3130), and the config's bytes are untouched.
+  it('--agent-arming and --strict on an EXISTING config say they wrote nothing, and write nothing', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+    const configPath = path.join(tmpDir, 'totem.yaml');
+    const existing = [
+      'targets:',
+      "  - glob: '**/*.md'",
+      '    type: spec',
+      '    strategy: markdown-heading',
+      '',
+    ].join('\n');
+    fs.writeFileSync(configPath, existing, 'utf-8');
+
+    await initCommand({ agentArming: true, strict: true });
+
+    expect(fs.readFileSync(configPath, 'utf-8')).toBe(existing);
+    const output = stderr.join('\n');
+    expect(output).toContain('--strict (hooks.tier) and --agent-arming (hooks.agentArming)');
+    expect(output).toContain('write only into a config this command generates');
+    expect(output).toContain('totem.yaml is left as it is');
+    expect(output).toContain('totem hook install --force');
+
+    // And silent when neither flag is passed: the line is for the flags only.
+    stderr.length = 0;
+    await initCommand({});
+    expect(stderr.join('\n')).not.toContain('write only into a config this command generates');
   }, 60000);
 
   it('writes the local-state ignores in bare mode too (mmnto-ai/totem#3004)', async () => {

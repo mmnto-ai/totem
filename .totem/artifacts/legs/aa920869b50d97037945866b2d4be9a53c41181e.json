@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "aa920869b50d97037945866b2d4be9a53c41181e",
+  "readAt": "2026-10-29T01:17:00Z",
+  "findings": [
+    {
+      "id": "p2-f1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 752,
+      "claim": "With the tier optional, deleting a declared tier strict while other hooks keys remain no longer steps the hooks down on a bare or forced re-render (base: strict to standard by the accidental pin; fold: strict stays), while the schema and wiki text 're-run totem hook install --force after changing it' implied the deletion would; consistent with the mmnto-ai/totem#2753 survive rule and failing toward strict, but a direction change the changeset and the Amendment did not disclose.",
+      "counterexample": "Measured on both revisions in a scratch repository: hooks with tier strict and legsOwed installed, the tier line deleted, --force re-render: base standard, fold strict (and with the whole block deleted both revisions keep strict). FOLDED as disclosure (1e58a2c6), ranked MINOR by the seat since the direction is the ruled one: the schema comment, config-reference.md, hook-integration.md, the changeset and the Amendment say stepping down is a declaration (tier standard, or --standard) and that deleting the line keeps the installed tier."
+    },
+    {
+      "id": "p2-f2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.ts",
+      "line": 712,
+      "claim": "doctor --parity renders its git-hook canonical at the configured tier (standard when none is declared), so a --strict-installed hook under a tier-less hooks block reads as drift whose --force remedy no longer clears it; the loop existed at the base for a config with no hooks block and the fold extends it to every tier-less block.",
+      "counterexample": "hooks with legsOwed only and a --strict install: parity warns, --force keeps strict, parity warns again. FOLDED as remedy text (1e58a2c6, then the copy-paste-safe form): the remediation says to declare hooks.tier or pass --standard; aligning parity's tier axis with the Git Hooks row's installed-tier read (A10) is named a follow-up in the changeset, the wiki and the Amendment, not changed here."
+    },
+    {
+      "id": "p2-f3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 2300,
+      "claim": "The installer test covered less than the prose: bare path only (no --force, no init path, no hook-manager path), pre-push only in two segments, and no shield-only shape at the schema, resolver or installer; the root cause is pinned at the resolver every path reads, and the leg's probe confirmed all six paths.",
+      "counterexample": "FOLDED (1e58a2c6): the schema test takes shield-only and a legsOwed-plus-shield block, the resolver test takes shield-only, the installer test re-renders with --force and reads both hooks in every segment; the init and hook-manager paths stay measured by the leg's grid and are disclosed as such."
+    },
+    {
+      "id": "p2-f4",
+      "severity": "MINOR",
+      "file": ".totem/specs/3130.md",
+      "line": 226,
+      "claim": "The Amendment's table omitted the shield-only shape and stated only the bare path, where the changeset and the wiki said shield and 'bare or forced'.",
+      "counterexample": "Shield-only times strict goes standard to strict on all four non-flag paths, the same as the others. FOLDED (1e58a2c6): the table carries shield-only, every non-flag path, the deleted-tier transition and the second read's grid."
+    },
+    {
+      "id": "p2-f5",
+      "severity": "QUESTION",
+      "file": ".totem/artifacts/legs/96d7d797fa35d7df69194f433a38e5028d41b0d0.json",
+      "line": 1,
+      "claim": "Two questions for the seat: the branch carried a deposit commit above the read's head that the read did not cover; and the base column of the grid came from the main checkout's built dist rather than a build of the base commit made by the leg.",
+      "counterexample": "ANSWERED: the deposit commit is the first read's record, outside the fold by design; the main checkout sits at the base commit and its dist was rebuilt there at the 2.17.2 cut, before this branch existed, so the base column is the base revision's."
+    }
+  ],
+  "folded": [
+    "p2-f1",
+    "p2-f2",
+    "p2-f3",
+    "p2-f4",
+    "p2-f5"
+  ],
+  "verdict": "Second read, re-armed on the tier-resolution fold and scoped to it (the two commits ending at this head), by one falsification leg: blocking=0 material=1 minor=3 question=1, counts as typed; folded=5. The leg measured the full differential grid through the built dist of both revisions (seven config shapes x three installed tiers x six installer paths) and found exactly the four rows the fold intended changed, every other cell identical, the three readers of the parsed tier unchanged and defensive, the exported type loosened only, the Git Hooks compare unchanged, and the init refactor byte-identical in prompt and disclosure strings to the inline block it replaced. What remained was disclosure and remedy text: the deleted-tier transition now keeps strict (ranked MINOR by the seat: the ruled direction, now stated everywhere the old remedy sentence stood), parity's remedy under a tier-less block (its line now says how to step down; the axis alignment is a follow-up), and test and table coverage narrower than the prose (widened). The leg NAMED CONVERGENCE on the tier-resolution mechanism and said a prose-only fold needs no third read; the fold after this read is prose, tests and a remedy string, no remedy logic."
+}

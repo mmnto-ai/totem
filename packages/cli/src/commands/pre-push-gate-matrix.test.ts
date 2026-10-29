@@ -31,9 +31,13 @@ import { cleanTmpDir } from '../test-utils.js';
 import { buildPrePushHook } from './install-hooks.js';
 
 // The default render options the builder takes since mmnto-ai/totem#2692
-// (required options object, no defaulted parameter).
+// (required options object, no defaulted parameter). `agentArming: 'strict'`
+// because this matrix arms the strict shield arm through CLAUDE_CODE_AGENT=1 on
+// a standard-tier hook (see `runHook`), which since mmnto-ai/totem#3130 is what
+// the rendered key, not the marker alone, decides.
 const RENDER = {
   tier: 'standard' as const,
+  agentArming: 'strict' as const,
   totemDir: '.totem',
   fallbackCmd: 'pnpm dlx @mmnto/cli',
 };

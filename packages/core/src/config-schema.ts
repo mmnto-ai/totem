@@ -744,10 +744,42 @@ export const TotemConfigSchema = z.object({
        *  grounded on an issue, or on a design record bound with `totem spec --from
        *  <record>` — whose subject carries the shape the command promises; a
        *  free-text topic run, and any artifact written before the rule, read as
-       *  not-evidence. Agents are auto-detected and enforced at strict level regardless
-       *  of this setting. The tier is rendered into the hook at install, so re-run
-       *  `totem hook install --force` after changing it (mmnto-ai/totem#2692). */
-      tier: z.enum(['strict', 'standard']).default('standard'),
+       *  not-evidence. The tier governs EVERY shell, an AI agent's included: an
+       *  agent shell arms the strict tier on a standard-tier install only when
+       *  `agentArming` below says so (mmnto-ai/totem#3130). The tier is rendered
+       *  into the hook at install, so re-run `totem hook install --force` after
+       *  changing it (mmnto-ai/totem#2692).
+       *
+       *  ABSENT ⇒ `'standard'`, applied by every reader — and deliberately NOT a
+       *  schema default (mmnto-ai/totem#3130, the leg's finding): a default here
+       *  made any `hooks` block at all parse WITH a tier, so a block carrying only
+       *  `legsOwed`, `shield` or `agentArming` PINNED the tier to standard, and a
+       *  bare or forced re-render then silently downgraded a hook installed with
+       *  `--strict` — the downgrade mmnto-ai/totem#2753 ruled against. Only a
+       *  declared tier pins one; "nobody said" stays representable. It follows
+       *  that stepping DOWN from a declared `'strict'` is a declaration too: write
+       *  `'standard'` (or install with `--standard`); deleting the line and
+       *  re-rendering, with or without `--force`, leaves the installed hooks at
+       *  the tier they declare. */
+      tier: z.enum(['strict', 'standard']).optional(),
+
+      /** Whether an AI-agent shell arms the STRICT tier on a repository whose
+       *  `tier` is `'standard'` (mmnto-ai/totem#3130, designed with
+       *  mmnto-ai/totem#3042). `'strict'`: a shell carrying an agent marker —
+       *  `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_AGENT`,
+       *  `CLAUDE_VERSION` (Claude Code), `CURSOR_TRACE_ID` (Cursor),
+       *  `ANTIGRAVITY_AGENT` (Antigravity) or `TOTEM_SELF_AGENT` (any seat that
+       *  declares itself per shell) — runs the strict arms (the spec-evidence gate
+       *  at commit; `doctor --strict`, the review gate and the blocking legs gate
+       *  at push) while a human's shell keeps the pinned tier. `'off'`: every
+       *  shell follows the pinned tier. ABSENT ⇒ `'off'`, and deliberately not a
+       *  schema default: `totem doctor`'s Agent Arming row tells an unset key
+       *  from a declared `'off'` and warns when it is unset on a repository
+       *  with registered seats. Rendered into the hooks at install
+       *  (`TOTEM_HOOK_AGENT_ARMING`), so re-run `totem hook install --force`
+       *  after changing it. A repository that wants every shell strict sets
+       *  `tier: 'strict'` instead. */
+      agentArming: z.enum(['off', 'strict']).optional(),
 
       /** The judgment-dense path floor `totem legs gate` judges a push against
        *  (mmnto-ai/totem#2698). A changed file matching any of these globs owes

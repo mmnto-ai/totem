@@ -1286,9 +1286,44 @@ describe('hooks.legsOwed.globs — the judgment-dense path floor (mmnto-ai/totem
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.hooks?.legsOwed.globs).toEqual([...DEFAULT_LEGS_OWED_GLOBS]);
-      // …and the sibling default is untouched.
-      expect(result.data.hooks?.tier).toBe('standard');
+      // …and the sibling `tier` stays ABSENT: it has no schema default since
+      // mmnto-ai/totem#3130, because a parsed-in default pinned the tier for any
+      // `hooks` block and let a re-render downgrade a `--strict` install.
+      expect(result.data.hooks?.tier).toBeUndefined();
     }
+  });
+
+  // mmnto-ai/totem#3130 (the leg's F1): a `hooks` block that declares no tier
+  // parses with NONE — the installer reads "nobody said" and keeps the installed
+  // hook's own tier (the mmnto-ai/totem#2753 survive rule). A declared tier parses
+  // as declared, and the arming rides beside it.
+  it('a `hooks` block declaring only agentArming or only legsOwed carries no tier; a declared tier is kept', () => {
+    for (const hooks of [
+      { agentArming: 'strict' },
+      { agentArming: 'off' },
+      { legsOwed: { enforce: 'block' } },
+      { legsOwed: { globs: ['docs/**'] }, agentArming: 'strict' },
+      { shield: { enforce: 'advisory' } },
+      { legsOwed: {}, shield: {} },
+    ]) {
+      const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, hooks });
+      expect(result.success, JSON.stringify(hooks)).toBe(true);
+      if (result.success) expect(result.data.hooks?.tier, JSON.stringify(hooks)).toBeUndefined();
+    }
+    const declared = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { tier: 'standard', agentArming: 'strict' },
+    });
+    expect(declared.success).toBe(true);
+    if (declared.success) {
+      expect(declared.data.hooks?.tier).toBe('standard');
+      expect(declared.data.hooks?.agentArming).toBe('strict');
+    }
+    const invalid = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { tier: 'relaxed' },
+    });
+    expect(invalid.success).toBe(false);
   });
 
   it('resolves to the default floor when `hooks` declares only a tier', () => {
@@ -1426,7 +1461,8 @@ describe('hooks.shield.enforce — the shield gate exit knob (mmnto-ai/totem#252
     if (result.success) {
       expect(result.data.hooks?.shield).toEqual({});
       expect(result.data.hooks?.legsOwed).toEqual({ globs: [...DEFAULT_LEGS_OWED_GLOBS] });
-      expect(result.data.hooks?.tier).toBe('standard');
+      // No parsed-in tier since mmnto-ai/totem#3130: an undeclared tier pins nothing.
+      expect(result.data.hooks?.tier).toBeUndefined();
     }
   });
 

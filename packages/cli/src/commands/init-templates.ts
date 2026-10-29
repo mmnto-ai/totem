@@ -9,7 +9,7 @@ import type { ConfigFormat, EmbeddingTier } from './init-detect.js';
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
 // This allows `totem init` to detect stale blocks and offer upgrades.
 
-export const REFLEX_VERSION = 18;
+export const REFLEX_VERSION = 19;
 export const REFLEX_START = '<!-- totem:reflexes:start -->';
 export const REFLEX_END = '<!-- totem:reflexes:end -->';
 export const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
@@ -46,7 +46,7 @@ When deciding where to store information or rules, use this decision tree:
 [FOR LOCAL CLI/TERMINAL AGENTS ONLY] Do not attempt to run these commands if you are a headless bot or operating in a cloud PR environment (e.g., Gemini Code Assist on GitHub).
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
 1. **Start of Session:** The SessionStart hook automatically runs \`totem describe\` to emit the project-orientation banner (project, tier, rule/lesson counts, targets, hooks). For richer derived project state (recent merged PRs, current branch + uncommitted files, latest strategy journal pointer, package versions, rule/lesson counts), call the MCP \`describe_project\` tool — the derived view replaces the retired \`docs/active_work.md\` convention (state is observed, not declared). For a freshness check (manifest staleness, shield drift, review state), run \`totem status\`. Run \`totem triage\` if you need to pick a new task. On a seat without the SessionStart hook (a cold start, or a vehicle that doesn't run hooks), run \`totem orient\` to derive in-flight and parked project state from primitives.
-2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to retrieve related context (lessons, specs, code) before writing code. Treat any generated plan as one retrieval input, never the contract — derive the actual design from primary sources (the issue, the code, project doctrine). Under the strict hook tier — which a Claude Code or Cursor seat gets automatically, because the installed hooks arm it when the shell carries \`CLAUDECODE\`, \`CLAUDE_CODE_ENTRYPOINT\` or \`CURSOR_TRACE_ID\` (any other seat opts in with \`totem hook install --strict\`, or with \`hooks.tier\` followed by \`totem hook install --force\` so the tier is re-rendered; mmnto-ai/totem#2706) — this is REQUIRED, not optional: the pre-commit hook blocks until the checkout carries an ANCHORED \`totem spec\` run artifact, and prints the evidence it found. ANCHORED means the run was grounded on an ISSUE, or on a hand-authored design record bound with \`totem spec --from <record>\` — and that its SUBJECT carries the shape the command promises: for an issue run, every required heading with a non-empty body (or, when your project overrides the spec system prompt, just one heading with a body — a custom prompt is not held to the built-in skeleton); for a bound record, at least one heading with a body in the RECORD's own bytes, re-read from disk at commit time. A free-text topic run is NOT evidence (that is the confabulation surface the rule exists for), and neither is an artifact written before this rule — re-run it anchored. A response served from the cache writes no artifact, so add \`--fresh\` when the gate says there is nothing new (mmnto-ai/totem#2690, mmnto-ai/totem#2700). Under the same strict tier the pre-push hook additionally blocks a legs-owed push — a diff touching the paths in \`hooks.legsOwed.globs\` (doctrine, public copy, \`.changeset/**\` and the contract classes your project declares) — until the checkout carries a fresh leg deposit for its head, written with \`totem legs deposit --sha HEAD --from <findings.json>\` once the leg returns, and the gate prints the evidence it found (mmnto-ai/totem#2698). That legs gate can also be armed on its own, at any tier, with \`hooks.legsOwed.enforce: 'block'\` — a standard-tier install then refuses a legs-owed push too, and the gate's line names the key (mmnto-ai/totem#2771).
+2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to retrieve related context (lessons, specs, code) before writing code. Treat any generated plan as one retrieval input, never the contract — derive the actual design from primary sources (the issue, the code, project doctrine). Under the strict hook tier — \`hooks.tier: 'strict'\` (or \`totem hook install --strict\`) makes every shell strict; otherwise an AI-agent shell is strict only on a repository whose tracked config sets \`hooks.agentArming: 'strict'\` (off by default, mmnto-ai/totem#3130): the installed hooks then arm it when the shell carries \`CLAUDECODE\`, \`CLAUDE_CODE_ENTRYPOINT\`, \`CURSOR_TRACE_ID\`, \`TOTEM_SELF_AGENT\` or \`ANTIGRAVITY_AGENT\`, and the key is rendered into the hooks, so \`totem hook install --force\` re-renders them after it changes — this is REQUIRED, not optional: the pre-commit hook blocks until the checkout carries an ANCHORED \`totem spec\` run artifact, and prints the evidence it found. ANCHORED means the run was grounded on an ISSUE, or on a hand-authored design record bound with \`totem spec --from <record>\` — and that its SUBJECT carries the shape the command promises: for an issue run, every required heading with a non-empty body (or, when your project overrides the spec system prompt, just one heading with a body — a custom prompt is not held to the built-in skeleton); for a bound record, at least one heading with a body in the RECORD's own bytes, re-read from disk at commit time. A free-text topic run is NOT evidence (that is the confabulation surface the rule exists for), and neither is an artifact written before this rule — re-run it anchored. A response served from the cache writes no artifact, so add \`--fresh\` when the gate says there is nothing new (mmnto-ai/totem#2690, mmnto-ai/totem#2700). Under the same strict tier the pre-push hook additionally blocks a legs-owed push — a diff touching the paths in \`hooks.legsOwed.globs\` (doctrine, public copy, \`.changeset/**\` and the contract classes your project declares) — until the checkout carries a fresh leg deposit for its head, written with \`totem legs deposit --sha HEAD --from <findings.json>\` once the leg returns, and the gate prints the evidence it found (mmnto-ai/totem#2698). That legs gate can also be armed on its own, at any tier, with \`hooks.legsOwed.enforce: 'block'\` — a standard-tier install then refuses a legs-owed push too, and the gate's line names the key (mmnto-ai/totem#2771).
 3. **Before Push:** Run \`totem lint\` — the deterministic enforcement floor (zero LLM, ~2s). **Before PR:** \`totem review\` runs supplementary AI lanes over the diff (~18s) — advisory sensors, not a merge gate; known limits are disclosed in the run output (LLM window truncation on large diffs; non-code files skipped). Your team's own review discipline decides what constitutes the review of record.
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
 5. **Managed hooks self-repair:** \`totem init\` distributes \`.totem/prepare.cjs\` and wires \`package.json\` \`prepare\` to it only when no \`prepare\` script exists. The wrapper runs \`totem hook install\` on every \`pnpm install\`, drift-repairing the managed Claude/Gemini hooks — no manual re-install needed.
@@ -4183,6 +4183,54 @@ ${orchestratorBlock}
 
 export default config;
 `;
+}
+
+/** The `hooks` keys `totem init` can declare into a config it just generated. */
+export interface InitHooksKeys {
+  tier?: 'strict';
+  agentArming?: 'strict';
+}
+
+/**
+ * Compose the declared `hooks` keys into a config `totem init` just generated
+ * (mmnto-ai/totem#3130), as ONE `hooks` object per format.
+ *
+ * `.ts`: inserted inside the config object, anchored on the generated template's
+ * tail — the closing brace, a blank line and `export default config;` — with the
+ * bare closing-brace tail as the fallback for a template that ends there. The
+ * replace this helper supersedes anchored on the bare tail ONLY, which the
+ * generated template never has, so `--strict` was a measured silent no-op on
+ * `.ts` (the `--pilot` shape, mmnto-ai/totem#2815, mmnto-ai/totem#3083). yaml
+ * and toml append. `written` is MEASURED (the bytes changed), never asserted, so
+ * a tail neither anchor matches is reported by the caller as not landed. No keys
+ * ⇒ the content unchanged.
+ */
+export function injectHooksKeys(
+  content: string,
+  filename: string,
+  keys: InitHooksKeys,
+): { content: string; written: boolean } {
+  const entries: [string, string][] = [];
+  if (keys.tier !== undefined) entries.push(['tier', keys.tier]);
+  if (keys.agentArming !== undefined) entries.push(['agentArming', keys.agentArming]);
+  if (entries.length === 0) return { content, written: false };
+
+  let next = content;
+  if (filename.endsWith('.ts')) {
+    const object = `hooks: { ${entries.map(([k, v]) => `${k}: '${v}'`).join(', ')} },`;
+    const withExport = /\n};\n\nexport default config;\n$/;
+    const bareTail = /\n};\s*$/;
+    if (withExport.test(next)) {
+      next = next.replace(withExport, `\n\n  ${object}\n};\n\nexport default config;\n`);
+    } else if (bareTail.test(next)) {
+      next = next.replace(bareTail, `\n\n  ${object}\n};\n`);
+    }
+  } else if (filename.endsWith('.yaml') || filename.endsWith('.yml')) {
+    next = `${next.trimEnd()}\nhooks:\n${entries.map(([k, v]) => `  ${k}: ${v}`).join('\n')}\n`;
+  } else if (filename.endsWith('.toml')) {
+    next = `${next.trimEnd()}\n\n[hooks]\n${entries.map(([k, v]) => `${k} = "${v}"`).join('\n')}\n`;
+  }
+  return { content: next, written: next !== content };
 }
 
 /**

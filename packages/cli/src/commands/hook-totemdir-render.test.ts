@@ -36,6 +36,7 @@ import {
   buildPostCheckoutHookContent,
   buildPreCommitHook,
   buildPrePushHook,
+  DEFAULT_AGENT_ARMING,
   DEFAULT_TOTEM_DIR,
   getFallbackCommand,
   hasUnrenderableTotemDirChar,
@@ -48,9 +49,15 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 
 const DEFAULT_RENDER: HookRenderOptions = {
   tier: 'standard',
+  agentArming: DEFAULT_AGENT_ARMING,
   totemDir: DEFAULT_TOTEM_DIR,
   fallbackCmd: 'pnpm dlx @mmnto/cli',
 };
+
+// What THIS repository renders its `tools/` hooks at: the default in every field
+// but the arming, which totem.config.ts pins to 'strict' (mmnto-ai/totem#3130) so
+// its seats' shells keep the strict arm while a human's shell stays standard.
+const TOOLS_RENDER: HookRenderOptions = { ...DEFAULT_RENDER, agentArming: 'strict' };
 
 /** Every hook body, rendered at one set of options. */
 function renderAll(render: HookRenderOptions): { name: string; body: string }[] {
@@ -66,12 +73,13 @@ function renderAll(render: HookRenderOptions): { name: string; body: string }[] 
 
 describe('default render is byte-identical to the shipped tools/ hooks (C3)', () => {
   it.each([
-    ['pre-commit', () => buildPreCommitHook(DEFAULT_RENDER)],
-    ['pre-push', () => buildPrePushHook(DEFAULT_RENDER)],
-    ['post-merge', () => buildHookContent(DEFAULT_RENDER)],
+    ['pre-commit', () => buildPreCommitHook(TOOLS_RENDER)],
+    ['pre-push', () => buildPrePushHook(TOOLS_RENDER)],
+    ['post-merge', () => buildHookContent(TOOLS_RENDER)],
   ])('tools/%s', (file, render) => {
     // The repo pins no totemDir and no tier, and resolves the pnpm fallback —
-    // exactly DEFAULT_RENDER (guarded below so a lockfile change is loud).
+    // DEFAULT_RENDER in every field but the arming it pins (guarded below so a
+    // lockfile change is loud).
     expect(getFallbackCommand(REPO_ROOT)).toBe(DEFAULT_RENDER.fallbackCmd);
     expect(fs.readFileSync(path.join(REPO_ROOT, 'tools', file), 'utf-8')).toBe(render());
   });
@@ -83,6 +91,25 @@ describe('default render is byte-identical to the shipped tools/ hooks (C3)', ()
     expect(strict).toContain('TOTEM_HOOK_TIER="strict"');
     expect(standard).toContain('TOTEM_HOOK_TIER="standard"');
     expect(strict.replace('TOTEM_HOOK_TIER="strict"', 'TOTEM_HOOK_TIER="standard"')).toBe(standard);
+  });
+
+  it('the arming is byte-stable at the default too: only its assignment line differs (mmnto-ai/totem#3130)', () => {
+    for (const build of [buildPreCommitHook, buildPrePushHook]) {
+      const armed = build({ ...DEFAULT_RENDER, agentArming: 'strict' });
+      const off = build(DEFAULT_RENDER);
+      expect(armed).toContain('\nTOTEM_HOOK_AGENT_ARMING="strict"\n');
+      expect(off).toContain('\nTOTEM_HOOK_AGENT_ARMING="off"\n');
+      expect(
+        armed.replace('TOTEM_HOOK_AGENT_ARMING="strict"', 'TOTEM_HOOK_AGENT_ARMING="off"'),
+      ).toBe(off);
+    }
+    // The two tier-less hooks carry no arming line and do not depend on it.
+    const armedRender: HookRenderOptions = { ...DEFAULT_RENDER, agentArming: 'strict' };
+    expect(buildHookContent(armedRender)).toBe(buildHookContent(DEFAULT_RENDER));
+    expect(buildPostCheckoutHookContent(armedRender)).toBe(
+      buildPostCheckoutHookContent(DEFAULT_RENDER),
+    );
+    expect(buildHookContent(DEFAULT_RENDER)).not.toContain('TOTEM_HOOK_AGENT_ARMING');
   });
 
   it('post-merge and post-checkout render identically for both tiers (the A10 sensor premise)', () => {
@@ -334,6 +361,71 @@ describe('resolveHookRenderOptions — the one config→render seam (C1)', () =>
     expect(render.tier).toBe('standard');
   });
 
+  // mmnto-ai/totem#3130: the arming is config-only (no flag), absent ⇒ off, and
+  // it rides the resolved options into the two enforcement hooks' assignment line.
+  it('reads hooks.agentArming from the repo config and renders it; absent means off', async () => {
+    writeConfig(`${BASE_TARGETS}hooks:\n  agentArming: strict\n`);
+    const armed = await resolveHookRenderOptions(tmpDir);
+    expect(armed.agentArming).toBe('strict');
+    // A `hooks` block carrying only the arming declares NO tier: the default is
+    // applied, and nothing is pinned, so `tierForHook` keeps an installed hook's
+    // own tier (the leg's F1 on mmnto-ai/totem#3130; RED while the schema gave
+    // `tier` a default, which the resolver read as a pin).
+    expect(armed.tier).toBe('standard');
+    expect(armed.tierPinned).toBeUndefined();
+    expect(buildPreCommitHook(armed)).toContain('\nTOTEM_HOOK_AGENT_ARMING="strict"\n');
+    expect(buildPrePushHook(armed)).toContain('\nTOTEM_HOOK_AGENT_ARMING="strict"\n');
+
+    writeConfig(`${BASE_TARGETS}hooks:\n  tier: strict\n`);
+    const unset = await resolveHookRenderOptions(tmpDir);
+    expect(unset.agentArming).toBe(DEFAULT_AGENT_ARMING);
+    expect(unset.agentArming).toBe('off');
+    expect(buildPrePushHook(unset)).toContain('\nTOTEM_HOOK_AGENT_ARMING="off"\n');
+
+    writeConfig(`${BASE_TARGETS}hooks:\n  agentArming: off\n`);
+    expect((await resolveHookRenderOptions(tmpDir)).agentArming).toBe('off');
+  });
+
+  it('a value outside the two is a config that will not load — the LOUD default, arming off (A8)', async () => {
+    writeConfig(`${BASE_TARGETS}hooks:\n  agentArming: always\n`);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const render = await resolveHookRenderOptions(tmpDir);
+      expect(render.agentArming).toBe('off');
+      expect(render.configError).toMatch(/agentArming/);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(String(errorSpy.mock.calls[0]?.[0])).toContain("agent arming 'off'");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('only a DECLARED tier pins one: a legsOwed-only block pins nothing, `tier: standard` does (mmnto-ai/totem#3130 F1)', async () => {
+    writeConfig(`${BASE_TARGETS}hooks:\n  legsOwed:\n    enforce: block\n`);
+    const legsOnly = await resolveHookRenderOptions(tmpDir);
+    expect(legsOnly.tier).toBe('standard');
+    expect(legsOnly.tierPinned).toBeUndefined();
+
+    writeConfig(`${BASE_TARGETS}hooks:\n  shield:\n    enforce: advisory\n`);
+    const shieldOnly = await resolveHookRenderOptions(tmpDir);
+    expect(shieldOnly.tier).toBe('standard');
+    expect(shieldOnly.tierPinned).toBeUndefined();
+
+    writeConfig(`${BASE_TARGETS}hooks:\n  tier: standard\n  agentArming: strict\n`);
+    const declared = await resolveHookRenderOptions(tmpDir);
+    expect(declared.tier).toBe('standard');
+    expect(declared.tierPinned).toBe(true);
+    expect(declared.agentArming).toBe('strict');
+  });
+
+  it('an explicit tier flag leaves the configured arming alone', async () => {
+    writeConfig(`${BASE_TARGETS}hooks:\n  agentArming: strict\n`);
+    const render = await resolveHookRenderOptions(tmpDir, { tier: 'strict' });
+    expect(render.tier).toBe('strict');
+    expect(render.tierPinned).toBe(true);
+    expect(render.agentArming).toBe('strict');
+  });
+
   it('a config that resolves but will not load degrades to the defaults LOUDLY (A8)', async () => {
     writeConfig('targets: [oh no: {');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -350,7 +442,9 @@ describe('resolveHookRenderOptions — the one config→render seam (C1)', () =>
       const line = String(errorSpy.mock.calls[0]?.[0]);
       expect(line).toContain('totem.yaml');
       expect(line).toContain("totemDir '.totem'");
+      expect(line).toContain("agent arming 'off'");
       expect(line).toContain('totem hook install --force');
+      expect(render.agentArming).toBe('off');
     } finally {
       errorSpy.mockRestore();
     }

@@ -191,7 +191,10 @@ export function checkCompiledRules(cwd: string, totemDir = '.totem'): Diagnostic
  */
 export async function checkGitHooks(
   cwd: string,
-  config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
+  config?: {
+    totemDir?: string;
+    hooks?: { tier?: 'strict' | 'standard'; agentArming?: 'off' | 'strict' };
+  },
 ): Promise<DiagnosticResult> {
   const gitRoot = resolveGitRoot(cwd);
   if (!gitRoot) {
@@ -479,11 +482,20 @@ function totemOwnedBlock(text: string, marker: string, endMarker: string): strin
  * assignment — a comment quoting one does not count), so a hook installed with
  * `--strict` on a repo whose config says nothing is never reported as drift — and
  * never handed a `--force` that would silently downgrade it to standard.
+ *
+ * The agent arming IS an axis (mmnto-ai/totem#3130): `hooks.agentArming` has no
+ * flag spelling, only the tracked config, so a hook whose rendered
+ * `TOTEM_HOOK_AGENT_ARMING` differs from the repo's configured value (absent ⇒
+ * `off`) is genuine drift between a tracked file and the installed hook, and the
+ * shape-specific remedy re-renders it.
  */
 async function hooksStaleAgainstCanonical(
   gitRoot: string,
   hooksDir: string,
-  config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
+  config?: {
+    totemDir?: string;
+    hooks?: { tier?: 'strict' | 'standard'; agentArming?: 'off' | 'strict' };
+  },
 ): Promise<HookCanonicalSense> {
   let totemDir = config?.totemDir;
   try {
@@ -495,9 +507,15 @@ async function hooksStaleAgainstCanonical(
     if (hooks.hookTotemDirProblem(totemDir) !== null) {
       return { kind: 'sensed', totemDir, stale: [] };
     }
-    type Render = { tier: 'strict' | 'standard'; totemDir: string; fallbackCmd: string };
+    type Render = {
+      tier: 'strict' | 'standard';
+      agentArming: 'off' | 'strict';
+      totemDir: string;
+      fallbackCmd: string;
+    };
     const base: Render = {
       tier: config?.hooks?.tier ?? 'standard',
+      agentArming: config?.hooks?.agentArming ?? hooks.DEFAULT_AGENT_ARMING,
       totemDir,
       fallbackCmd: hooks.getFallbackCommand(gitRoot),
     };
@@ -3333,7 +3351,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
         /** mmnto-ai/totem#2692: threaded into checkGitHooks + checkStaleRules so
          *  neither re-opens the config to learn where `.totem/` actually is. */
         totemDir?: string;
-        hooks?: { tier?: 'strict' | 'standard' };
+        hooks?: { tier?: 'strict' | 'standard'; agentArming?: 'off' | 'strict' };
       }
     | undefined;
   try {
@@ -3391,6 +3409,10 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's
     // module stays off the cold-start graph, the command-layer discipline.
     await (await import('./doctor-seat-identity.js')).checkSeatIdentity(cwd),
+    // Agent-arming sense (mmnto-ai/totem#3130): warns when `hooks.agentArming`
+    // is unset on a repository with registered seats, whose agent commits and
+    // pushes therefore run the pinned tier. Same lazy import, same exemption.
+    await (await import('./doctor-agent-arming.js')).checkAgentArming(cwd, loadedConfig),
   ];
 
   for (const result of results) {

@@ -372,15 +372,24 @@ function lockContentPackageDirFor(contractId: string, gitRoot: string): string |
  */
 interface HookRenderOptionsShape {
   tier: 'strict' | 'standard';
+  /** `hooks.agentArming` (absent ⇒ `'off'`), rendered into the two enforcement
+   *  hooks since mmnto-ai/totem#3130; a hook rendered at the other value is
+   *  genuine drift between the tracked config and the installed hook. */
+  agentArming: 'off' | 'strict';
   totemDir: string;
   fallbackCmd: string;
 }
 
 interface HookBuilderSource {
-  buildPreCommitHook: (options: { tier: 'strict' | 'standard'; totemDir: string }) => string;
+  buildPreCommitHook: (options: {
+    tier: 'strict' | 'standard';
+    agentArming: 'off' | 'strict';
+    totemDir: string;
+  }) => string;
   buildPrePushHook: (options: {
     fallbackCmd: string;
     tier: 'strict' | 'standard';
+    agentArming: 'off' | 'strict';
     totemDir: string;
   }) => string;
   buildHookContent: (options: { fallbackCmd: string; totemDir: string }) => string;
@@ -667,6 +676,11 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   // at the CONFIGURED tier — a hook on disk that does not match its repo's configured
   // tier is genuine drift, which the content compare correctly surfaces.
   let hookTier: 'strict' | 'standard' = 'standard';
+  // Agent arming the two enforcement hooks were rendered at, from the SAME
+  // repo-local config load (config.hooks.agentArming; mmnto-ai/totem#3130) —
+  // config-only, so a mismatch is genuine drift. Absent, or no repo-local config,
+  // resolves to the installer's DEFAULT_AGENT_ARMING at the render site below.
+  let hookAgentArming: 'off' | 'strict' | undefined;
   // Totem directory the git hooks were rendered at, resolved from the SAME
   // repo-local config load as the tier (mmnto-ai/totem#2692 C6): a hook naming
   // `.totem/` in a repo that configured something else is genuine drift, and the
@@ -696,6 +710,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const config = await loadConfig(configPath);
       configValue = config.orient?.parityManifest;
       hookTier = config.hooks?.tier ?? 'standard';
+      hookAgentArming = config.hooks?.agentArming;
       // A value the hooks cannot be rendered for (`.`, a `..` segment, …) never
       // produced installed hooks — the installer refuses it — so the canonical is
       // regenerated at the default rather than letting a builder throw mid-row
@@ -831,6 +846,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         buildPrePushHook,
         buildHookContent,
         buildPostCheckoutHookContent,
+        DEFAULT_AGENT_ARMING,
         getFallbackCommand,
         resolveHooksDir,
         TOTEM_PRECOMMIT_MARKER,
@@ -1205,15 +1221,27 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             const parityHooksDir = resolveHooksDir(gitRoot) ?? path.join(gitRoot, '.git', 'hooks');
             generatedArtifacts = gitHookArtifactsFor(
               parityHooksDir,
-              { tier: hookTier, totemDir: hookTotemDir, fallbackCmd },
+              {
+                tier: hookTier,
+                agentArming: hookAgentArming ?? DEFAULT_AGENT_ARMING,
+                totemDir: hookTotemDir,
+                fallbackCmd,
+              },
               hookBuilders,
             );
             artifactLabel = 'git hook';
             // --force so the remediation actually repairs a stale hook: bare
             // `totem hook install` only drift-repairs a totem-OWNED whole file, but
             // --force is the always-correct instruction for any drift class incl. a
-            // user hook with an appended totem block (mmnto-ai/totem#2138).
-            installCommand = 'totem hook install --force';
+            // user hook with an appended totem block (mmnto-ai/totem#2138). One class
+            // it does not clear (mmnto-ai/totem#3130): this canonical is rendered at
+            // the CONFIGURED tier, standard when none is declared, while the installer
+            // keeps a `--strict`-installed hook strict under a tier-less block — so
+            // the line says how to step the tier down, after a shell comment marker
+            // so the command stays copy-paste safe; aligning this row's tier axis
+            // with the Git Hooks row's (the installed tier, A10) is a follow-up.
+            installCommand =
+              'totem hook install --force  # a hook installed with --strict under a config that declares no hooks.tier re-renders strict and stays drift here: declare hooks.tier, or pass --standard, to step it down';
           } else if (c.id === 'session-start-orientation') {
             generatedArtifacts = sessionStartArtifactsFor(gitRoot, sessionStartTemplates);
             artifactLabel = 'SessionStart hook';

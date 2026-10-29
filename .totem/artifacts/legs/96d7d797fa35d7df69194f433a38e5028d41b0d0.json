@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "96d7d797fa35d7df69194f433a38e5028d41b0d0",
+  "readAt": "2026-10-28T23:12:30Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 752,
+      "claim": "The schema gave hooks.tier a default of standard inside the optional hooks object, so any hooks block parsed WITH a tier; resolveHookRenderOptions read it as a pin (tierPinned true), tierForHook ignored the installed hook's declared tier, and a bare or forced re-render downgraded a --strict-installed hook to standard with nothing saying so (the mmnto-ai/totem#2753 downgrade), reached through the new key, the init question and the doctor row's remedy; pre-existing for a legsOwed-only block.",
+      "counterexample": "Measured in a scratch repository: install with tier strict (pre-push TOTEM_HOOK_TIER=strict); a bare re-install with no config keeps strict; write a config carrying only hooks.agentArming and re-run the bare install: the hook reads TOTEM_HOOK_TIER=standard. FOLDED in the descendant 5fbadbd6: tier is optional in the schema with no default, every reader applies standard when absent, only a declared tier pins; pinned at the schema, the resolver (tierPinned undefined for an arming-only and a legsOwed-only block) and the installer (a strict install survives a bare re-render under both shapes and gains the arming; a declared standard still downgrades)."
+    },
+    {
+      "id": "f2",
+      "severity": "MINOR",
+      "file": ".changeset/hooks-agent-arming-opt-in.md",
+      "line": 6,
+      "claim": "The changeset said the Git Hooks row AND doctor --parity keep the tier out of their compare; parity renders its canonical at the CONFIGURED tier and prescribes --force uniformly.",
+      "counterexample": "doctor-parity.ts: 'regenerates the canonical at the CONFIGURED tier'. FOLDED (c9658624): the sentence names the Git Hooks row alone for the tier rule and states parity's configured-tier canonical and --force remedy."
+    },
+    {
+      "id": "f3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-agent-arming.ts",
+      "line": 75,
+      "claim": "The row's scan-failure warn arm cannot fire for an unreadable orchestration tree: core's readSeatDirs swallows readdir errors and returns zero seats, so EACCES or a file at .totem/orchestration reads as a clean 'no seats registered'.",
+      "counterexample": "packages/core/src/orchestration-resolver.ts readSeatDirs: catch returns an empty array. FOLDED (c9658624): the docstring, the design record and the row's reach say the warn arm is for a thrown core import or root resolver, and that a missing or unreadable tree is zero seats by core's contract, the Seat Identity row's reach."
+    },
+    {
+      "id": "f4",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/doctor-agent-arming.ts",
+      "line": 71,
+      "claim": "A run from a linked worktree resolves the worktree as the repo root, where the gitignored orchestration tree does not exist, so the row passes with 'no seats registered' on a cohort repository with the key unset; is the worktree blind spot intended?",
+      "counterexample": "ANSWERED (c9658624): the tree lives at the resident checkout and the dirs are the registration; the row reads the checkout it runs in, the reach the Seat Identity row has; disclosed in the docstring."
+    },
+    {
+      "id": "f5",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/doctor-agent-arming.ts",
+      "line": 72,
+      "claim": "Seats registered only through .totem/orchestration/config.json host_agents, with no seat directories, are not counted; does the ruling's 'registered seats' include them?",
+      "counterexample": "ANSWERED (c9658624): the dirs ARE the registration (the mmnto-ai/totem#2141 roster ruling applied by readSeatDirs); a host_agents entry is a self-resolution override, not a registration, and is not counted; disclosed in the docstring."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index-lite.ts",
+      "line": 119,
+      "claim": "The Lite binary registered init without --agent-arming while the non-interactive line told the user to pass it; commander rejects the flag there.",
+      "counterexample": "FOLDED (c9658624): index-lite.ts registers --agent-arming and forwards it."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1904,
+      "claim": "--agent-arming (and --strict) on an existing config was a silent no-op: the existing-config branch logged only 'already exists'.",
+      "counterexample": "FOLDED (c9658624, pinned in c0609513): the branch says the flags write only into a config this run generates, that the existing file is left as it is, and names the key and the re-render."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/tools-hook-parity.test.ts",
+      "line": 33,
+      "claim": "tools/ parity hardcoded the arming value instead of reading totem.config.ts, so flipping the config would not fail any test while prepare kept copying strict templates.",
+      "counterexample": "FOLDED (96d7d797): the test reads the declaration from totem.config.ts and fails the file loudly when it finds none."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/config-drift.test.ts",
+      "line": 190,
+      "claim": "The reflex-clause test's comment claimed every marker is named while the loop skips two, and the changeset said the clause names 'the markers'.",
+      "counterexample": "FOLDED (c9658624): both say the five marker names a shell carries, with the two explicit-export aliases deliberately out of the prose."
+    },
+    {
+      "id": "f10",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 502,
+      "claim": "ANTIGRAVITY_AGENT rests on one seat's self-attestation on the mmnto-ai/totem#3042 thread ('attested by that seat; not measurable from mine'), not a measurement; should the register say 'reported'?",
+      "counterexample": "ANSWERED and FOLDED (c9658624): the table comment, the changeset and the design record say 'reported by one seat from its own shell'; carrying the name is harmless, an extra marker only widens the arm in an opted-in repository."
+    },
+    {
+      "id": "f11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 502,
+      "claim": "A cohort seat identifier appeared in a public source comment and in the committed design record, against the public-surface rule.",
+      "counterexample": "FOLDED (c9658624): both cite the issue alone; the branch was re-cut before its first push so no commit carries the identifier."
+    },
+    {
+      "id": "f12",
+      "severity": "MINOR",
+      "file": "docs/wiki/hook-integration.md",
+      "line": 41,
+      "claim": "The wikis said a human's shell keeps the pinned tier with no caveat for TOTEM_SELF_AGENT at user or machine scope, which marks every shell on the machine.",
+      "counterexample": "FOLDED (c9658624): hook-integration.md and config-reference.md carry the mmnto-ai/totem#2629 caveat and name the Seat Identity row's warn."
+    },
+    {
+      "id": "f13",
+      "severity": "MINOR",
+      "file": ".totem/specs/3130.md",
+      "line": 187,
+      "claim": "The design record claimed the row's reach includes the SessionStart banner; the banner runs totem describe, not doctor.",
+      "counterexample": "FOLDED (c9658624): the row's reach is a doctor run."
+    },
+    {
+      "id": "f14",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-agent-arming.ts",
+      "line": 32,
+      "claim": "The row's text conflated an unloadable config with an unset key: the same 'unset' message for no config, a failed load and the global profile.",
+      "counterexample": "FOLDED (c9658624): the warn says 'no loaded repo config declares it' and the docstring sends the load question to the Config row."
+    },
+    {
+      "id": "f15",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.test.ts",
+      "line": 570,
+      "claim": "Some new assertions were weaker than the clauses they pin: the arming-drift test's remedy regex passed for any shape, and the interactive init prompt's y and n paths were not driven.",
+      "counterexample": "FOLDED (c0609513, aa920869): the remedy assertion pins the owned-whole --force head; the prompt's decision is one exported function driven with a fake readline for y, yes, n, empty, the flags, --bare and non-interactive."
+    },
+    {
+      "id": "f16",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.ts",
+      "line": 674,
+      "claim": "doctor-parity spelled the arming default as a literal twice instead of the one exported constant the design named.",
+      "counterexample": "FOLDED (c9658624): parity resolves the absent arming through DEFAULT_AGENT_ARMING at the render site."
+    },
+    {
+      "id": "f17",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 103,
+      "claim": "The --strict help text said 'for agents' while under the ruling --strict makes every shell strict and the arming flag sits beside it.",
+      "counterexample": "FOLDED (c9658624): both binaries' help says every shell, and points at --agent-arming for an agent shell alone."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11",
+    "f12",
+    "f13",
+    "f14",
+    "f15",
+    "f16",
+    "f17"
+  ],
+  "verdict": "First read, of the whole branch diff against main, by one falsification leg: blocking=0 material=1 minor=13 question=3, counts as typed; folded=17 (the questions answered in the row's docstring and marked folded). The leg built the detection block's differential table (tier x arming x shell for both hooks and every downstream arm) and found only the ruled change plus the intended mmnto-ai/totem#3042 widening; the downstream arms, the POSIX shape, declaredHookTier, every render site, the global-profile and unloadable-config paths, the .ts injection claim at main, the init ordering, the scrub lists, the legs gate and CI, REFLEX_VERSION's reach and the tools/ bytes all held under attack. The one material finding sat beside the block, in tier resolution, and is folded in the descendant 5fbadbd6 with its own second read. This deposit is keyed to the re-cut head whose tree carries the minors' folds: the read itself was of the tree before those folds, re-cut before the first push to keep a cohort identifier out of every commit; the folds are the leg's own findings, each named above with the commit that carried it. Convergence was NOT named on this read; the second, scoped read decides it."
+}
