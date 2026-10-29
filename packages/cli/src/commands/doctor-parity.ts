@@ -1237,10 +1237,11 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             // it does not clear (mmnto-ai/totem#3130): this canonical is rendered at
             // the CONFIGURED tier, standard when none is declared, while the installer
             // keeps a `--strict`-installed hook strict under a tier-less block — so
-            // the line says how to step the tier down; aligning this row's tier axis
+            // the line says how to step the tier down, after a shell comment marker
+            // so the command stays copy-paste safe; aligning this row's tier axis
             // with the Git Hooks row's (the installed tier, A10) is a follow-up.
             installCommand =
-              'totem hook install --force (a hook installed with --strict under a config that declares no hooks.tier re-renders strict and stays drift here: declare hooks.tier, or pass --standard, to step it down)';
+              'totem hook install --force  # a hook installed with --strict under a config that declares no hooks.tier re-renders strict and stays drift here: declare hooks.tier, or pass --standard, to step it down';
           } else if (c.id === 'session-start-orientation') {
             generatedArtifacts = sessionStartArtifactsFor(gitRoot, sessionStartTemplates);
             artifactLabel = 'SessionStart hook';

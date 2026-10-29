@@ -1009,6 +1009,13 @@ describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
     const { results } = await checkParity(tmpDir);
     const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
     expect(prePush.status).toBe('warn');
+    // The remedy names the forced re-render and, after a shell comment marker so
+    // the command stays copy-paste safe, how to step a strict hook down under a
+    // tier-less block, the one class --force does not clear (mmnto-ai/totem#3130).
+    expect(prePush.remediation).toContain('totem hook install --force  # ');
+    expect(prePush.remediation).toContain(
+      'declare hooks.tier, or pass --standard, to step it down',
+    );
   });
 
   it('WARN — arming drift: an unarmed hook under a repo configured hooks.agentArming: strict (mmnto-ai/totem#3130)', async () => {
