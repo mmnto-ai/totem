@@ -27,11 +27,32 @@ const TOOLS_DIR = path.join(REPO_ROOT, 'tools');
 // is the default 'standard'. The fallback command derives from the repo's lockfile
 // exactly as the installer and doctor do (getFallbackCommand).
 const TIER = 'standard' as const;
+// This repo DOES pin `hooks.agentArming` (mmnto-ai/totem#3130): its seats' shells arm
+// the strict tier while a human's shell stays standard, and the value is rendered
+// into both enforcement hooks — so tools/ carries it. Read from totem.config.ts
+// itself (the one declaration), so a change there without regenerating tools/ is
+// loud here rather than drifting silently behind a hardcoded copy of the value.
+const CONFIG_TEXT = fs.readFileSync(path.join(REPO_ROOT, 'totem.config.ts'), 'utf-8');
+const DECLARED_ARMING = /^\s*agentArming:\s*'(off|strict)'/m.exec(CONFIG_TEXT)?.[1];
+// A reader that cannot find the declaration FAILS the file rather than falling back
+// to a default: a silent 'off' here would re-pin tools/ to a value the config does
+// not declare and mask the very drift this test exists to catch.
+if (DECLARED_ARMING === undefined) {
+  throw new Error(
+    "totem.config.ts declares no hooks.agentArming in the one-line form this test reads (agentArming: 'off' | 'strict', single-quoted, on its own line) — declare it that way, or widen this reader with the declaration.",
+  );
+}
+const AGENT_ARMING = DECLARED_ARMING as 'off' | 'strict';
 // This repo pins no `totemDir` either, so the installer's effective directory is the
 // schema default `.totem` — the value mmnto-ai/totem#2692 C3 pins these bytes at.
 const TOTEM_DIR = '.totem';
 const FALLBACK_CMD = getFallbackCommand(REPO_ROOT);
-const RENDER = { tier: TIER, totemDir: TOTEM_DIR, fallbackCmd: FALLBACK_CMD };
+const RENDER = {
+  tier: TIER,
+  agentArming: AGENT_ARMING,
+  totemDir: TOTEM_DIR,
+  fallbackCmd: FALLBACK_CMD,
+};
 
 function readTool(hook: string): string {
   return fs.readFileSync(path.join(TOOLS_DIR, hook), 'utf-8');

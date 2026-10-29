@@ -15,6 +15,7 @@ import { AI_PROMPT_BLOCK, buildNpxCommand, REFLEX_VERSION } from '../commands/in
 import { DOCS_SYSTEM_PROMPT } from './docs.js';
 import { REVIEW_LOOP_SKILL_CONTENT, REVIEW_REPLY_SKILL_CONTENT } from './init-templates.js';
 import {
+  AGENT_SHELL_MARKERS,
   buildPreCommitHook,
   buildPrePushHook,
   TOTEM_PRECOMMIT_MARKER,
@@ -26,9 +27,12 @@ const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
 // The default render options the hook builders take since mmnto-ai/totem#2692
 // (required options object, no defaulted parameter) — this repo pins no
-// `totemDir`, so `tools/` renders at the schema default.
+// `totemDir`, so `tools/` renders at the schema default. The arming is at ITS
+// schema default here: these cases compare structure, not the arming line
+// (tools-hook-parity.test.ts pins the bytes at the arming this repo declares).
 const RENDER = {
   tier: 'standard' as const,
+  agentArming: 'off' as const,
   totemDir: '.totem',
   fallbackCmd: 'pnpm dlx @mmnto/cli',
 };
@@ -173,23 +177,32 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(AI_PROMPT_BLOCK).toContain(`totem:reflexes:version:${REFLEX_VERSION}`);
   });
 
-  // The agent-detection half of the same sentence (mmnto-ai/totem#2706): which
-  // seats get strict automatically, on which variables, and the opt-in for the
-  // rest. Before 2706 the sentence said "which AI agents get automatically"
-  // while the hook tested names no Claude Code session exports, so an agent
-  // following its CLAUDE.md was told about an arm that never fired. A CLAUDE.md
-  // naming the wrong variable would reopen exactly that gap, so the variables
-  // are locked by name. The version guard in the two tests above cannot fail on
-  // its own (the block interpolates the same constant), so the literal pin here
-  // is what makes a clause edit without a bump loud: bump both together.
-  it('the gate clause names the seats that get strict automatically, the variables, and the opt-in', () => {
-    expect(AI_PROMPT_BLOCK).toContain('a Claude Code or Cursor seat gets automatically');
-    expect(AI_PROMPT_BLOCK).toContain('`CLAUDECODE`');
-    expect(AI_PROMPT_BLOCK).toContain('`CLAUDE_CODE_ENTRYPOINT`');
-    expect(AI_PROMPT_BLOCK).toContain('`CURSOR_TRACE_ID`');
+  // The agent-detection half of the same sentence: on which variables an agent
+  // shell is recognised, and what arms it. Before mmnto-ai/totem#2706 the sentence
+  // said "which AI agents get automatically" while the hook tested names no Claude
+  // Code session exports, so an agent following its CLAUDE.md was told about an
+  // arm that never fired; since mmnto-ai/totem#3130 the arm is OPT-IN through
+  // `hooks.agentArming`, so a clause that still promised the strict tier
+  // "automatically" would describe an arm the default install no longer has. The
+  // variables, the key, its default and the re-render are locked by name: the
+  // five marker names a shell carries, read from the one table
+  // (AGENT_SHELL_MARKERS); the two explicit-export aliases, CLAUDE_CODE_AGENT and
+  // CLAUDE_VERSION, stay in the hook's table and deliberately out of the prose.
+  // The version guard in the two tests above cannot fail on its own (the block
+  // interpolates the same constant), so the literal pin here is what makes a
+  // clause edit without a bump loud: bump both together.
+  it('the gate clause names the arming key, its default, the variables, and the re-render', () => {
+    expect(AI_PROMPT_BLOCK).not.toContain('a Claude Code or Cursor seat gets automatically');
+    expect(AI_PROMPT_BLOCK).toContain("`hooks.agentArming: 'strict'`");
+    expect(AI_PROMPT_BLOCK).toContain('off by default');
+    for (const marker of AGENT_SHELL_MARKERS) {
+      if (marker === 'CLAUDE_CODE_AGENT' || marker === 'CLAUDE_VERSION') continue; // explicit-export aliases, not named in prose
+      expect(AI_PROMPT_BLOCK).toContain(`\`${marker}\``);
+    }
+    expect(AI_PROMPT_BLOCK).toContain('totem hook install --force');
     expect(AI_PROMPT_BLOCK).toContain('totem hook install --strict');
     expect(AI_PROMPT_BLOCK).not.toContain('which AI agents get automatically');
-    expect(REFLEX_VERSION).toBe(18);
+    expect(REFLEX_VERSION).toBe(19);
   });
 
   // The degradation item (mmnto-ai/totem#2933 ask 3): when the Totem MCP tools
