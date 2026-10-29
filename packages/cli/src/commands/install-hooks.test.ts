@@ -20,6 +20,7 @@ import {
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
+  AGENT_SHELL_MARKERS,
   buildHookContent,
   buildPostCheckoutHookContent,
   buildPreCommitHook,
@@ -54,9 +55,13 @@ import { SPEC_REQUIRED_SECTIONS, SPEC_SYSTEM_PROMPT } from './spec-templates.js'
 // The default render options every pre-#2692 positional call implied
 // (mmnto-ai/totem#2692 C2 — the builders take a REQUIRED options object now, so
 // each site states the tier/totemDir/fallbackCmd it always assumed). Spread and
-// override the one field a case actually varies.
+// override the one field a case actually varies. `agentArming: 'strict'` keeps
+// every pre-#3130 suite's premise — a marker in the shell arms the strict arm on
+// a standard-tier hook — now that the arming is a rendered key (the schema's
+// default is 'off'; the arming suites below render 'off' explicitly).
 const RENDER = {
   tier: 'standard' as const,
+  agentArming: 'strict' as const,
   totemDir: '.totem',
   fallbackCmd: 'pnpm dlx @mmnto/cli',
 };
@@ -1667,6 +1672,15 @@ describe('installHooksNonInteractive', () => {
     cleanTmpDir(tmpDir);
   });
 
+  /** The render a CONFIG-LESS repo resolves at `tier`: the arming at its default
+   *  (mmnto-ai/totem#3130) whatever RENDER says, the fallback from the fixture. */
+  const configless = (tier: 'strict' | 'standard') => ({
+    ...RENDER,
+    tier,
+    agentArming: 'off' as const,
+    fallbackCmd: getFallbackCommand(tmpDir),
+  });
+
   it('returns null when not a git repo', async () => {
     const result = await installHooksNonInteractive(tmpDir);
     expect(result).toBeNull();
@@ -2260,7 +2274,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    const strict = configless('strict');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
@@ -2287,7 +2301,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    const strict = configless('strict');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END),
@@ -2305,7 +2319,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    const strict = configless('strict');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
@@ -2363,7 +2377,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    const strict = configless('strict');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
@@ -2389,7 +2403,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const standard = { ...RENDER, fallbackCmd: getFallbackCommand(tmpDir) };
+    const standard = configless('standard');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(standard), TOTEM_PRECOMMIT_END),
@@ -2413,7 +2427,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    const strict = configless('strict');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
@@ -2455,7 +2469,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const standard = { ...RENDER, fallbackCmd: getFallbackCommand(tmpDir) };
+    const standard = configless('standard');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(standard), TOTEM_PRECOMMIT_END),
@@ -2485,7 +2499,7 @@ describe('installHooksNonInteractive', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    const strict = configless('strict');
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
       withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
@@ -2511,7 +2525,7 @@ describe('installHooksNonInteractive', () => {
     fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
     const helperDir = path.join(tmpDir, '.totem', 'hooks');
     fs.mkdirSync(helperDir, { recursive: true });
-    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    const strict = configless('strict');
     fs.writeFileSync(
       path.join(helperDir, 'pre-push.sh'),
       withStaleComment(buildPrePushHook(strict), TOTEM_PREPUSH_END),
@@ -3089,7 +3103,11 @@ describe('upgradePrePushHookIfNeeded', () => {
 
   /** Canonical totem block: shebang stripped, trimmed — the expected upgrade output. */
   function expectedTotemBlock(): string {
-    return buildPrePushHook({ ...RENDER, fallbackCmd: getFallbackCommand(tmpDir) })
+    return buildPrePushHook({
+      ...RENDER,
+      agentArming: 'off' as const,
+      fallbackCmd: getFallbackCommand(tmpDir),
+    })
       .replace(/^#!\/bin\/sh\n/, '')
       .trim();
   }
@@ -3408,8 +3426,33 @@ describe('buildPreCommitHook agent detection', () => {
     expect(hook).toContain('CLAUDE_CODE_AGENT');
     expect(hook).toContain('CLAUDE_VERSION');
     expect(hook).toContain('CURSOR_TRACE_ID');
+    // The two mmnto-ai/totem#3042 added: a seat declaring itself per shell, and
+    // the one vehicle variable measured.
+    expect(hook).toContain('"$TOTEM_SELF_AGENT"');
+    expect(hook).toContain('"$ANTIGRAVITY_AGENT"');
     // GEMINI_API_KEY intentionally excluded — human devs export it for Totem's embedding provider
     expect(hook).not.toContain('GEMINI_API_KEY');
+  });
+
+  it('tests every marker of the ONE table, in order, inside the arming guard (mmnto-ai/totem#3130)', () => {
+    expect(AGENT_SHELL_MARKERS).toEqual([
+      'CLAUDECODE',
+      'CLAUDE_CODE_ENTRYPOINT',
+      'CLAUDE_CODE_AGENT',
+      'CLAUDE_VERSION',
+      'CURSOR_TRACE_ID',
+      'TOTEM_SELF_AGENT',
+      'ANTIGRAVITY_AGENT',
+    ]);
+    const test = AGENT_SHELL_MARKERS.map((name) => `[ -n "$${name}" ]`).join(' || ');
+    for (const hook of [buildPreCommitHook(RENDER), buildPrePushHook(RENDER)]) {
+      expect(hook).toContain(
+        `is_agent=0\nif [ "$TOTEM_HOOK_AGENT_ARMING" = "strict" ]; then\n  if ${test}; then\n    is_agent=1\n  fi\nfi`,
+      );
+      // The downstream arms keep their one test — a `--strict` install arms every
+      // shell with or without the key.
+      expect(hook).toContain('if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then');
+    }
   });
 
   it('includes TOTEM_HOOK_TIER variable', () => {
@@ -3420,6 +3463,28 @@ describe('buildPreCommitHook agent detection', () => {
   it('sets TOTEM_HOOK_TIER to strict when tier is strict', () => {
     const hook = buildPreCommitHook({ ...RENDER, tier: 'strict' });
     expect(hook).toContain('TOTEM_HOOK_TIER="strict"');
+  });
+
+  it('renders TOTEM_HOOK_AGENT_ARMING on the line after the tier, in both enforcement hooks, at the value given (mmnto-ai/totem#3130)', () => {
+    for (const [build, marker] of [
+      [buildPreCommitHook, TOTEM_PRECOMMIT_MARKER],
+      [buildPrePushHook, TOTEM_PREPUSH_MARKER],
+    ] as const) {
+      for (const agentArming of ['off', 'strict'] as const) {
+        const hook = build({ ...RENDER, agentArming });
+        const lines = hook.split('\n');
+        const tierIdx = lines.findIndex((line) => line === 'TOTEM_HOOK_TIER="standard"');
+        expect(tierIdx).toBeGreaterThan(0);
+        expect(lines[tierIdx + 1]).toBe(`TOTEM_HOOK_AGENT_ARMING="${agentArming}"`);
+        // Inside the totem-owned block, so the doctor compare and `declaredHookTier` see it.
+        expect(hook.indexOf(marker)).toBeLessThan(hook.indexOf('TOTEM_HOOK_AGENT_ARMING='));
+        // The tier reader is unmoved by the extra assignment line.
+        expect(declaredHookTier(hook, marker, TOTEM_PRECOMMIT_END) ?? 'standard').toBe('standard');
+      }
+    }
+    // The tier-less hooks carry no arming line.
+    expect(buildHookContent(RENDER)).not.toContain('TOTEM_HOOK_AGENT_ARMING');
+    expect(buildPostCheckoutHookContent(RENDER)).not.toContain('TOTEM_HOOK_AGENT_ARMING');
   });
 });
 
@@ -3550,14 +3615,11 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
       // CLAUDE_VERSION and CURSOR_TRACE_ID: five seat-measurements in the issue
       // thread found no live Claude Code session carrying any of those, so the
       // strict arm never fired for the seats it was written for.
+      // The ONE table the hook renders from (mmnto-ai/totem#3130): a seat shell
+      // exports TOTEM_SELF_AGENT, so a five-name scrub would leave this control
+      // armed on any cohort seat.
       const scrubbed: NodeJS.ProcessEnv = { ...process.env };
-      for (const name of [
-        'CLAUDECODE',
-        'CLAUDE_CODE_ENTRYPOINT',
-        'CLAUDE_CODE_AGENT',
-        'CLAUDE_VERSION',
-        'CURSOR_TRACE_ID',
-      ]) {
+      for (const name of AGENT_SHELL_MARKERS) {
         delete scrubbed[name];
       }
       const control = runHookWith(scrubbed);
@@ -3573,6 +3635,57 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
       const byEntrypoint = runHookWith({ ...scrubbed, CLAUDE_CODE_ENTRYPOINT: 'cli' });
       expect(byEntrypoint.status).toBe(1);
       expect(byEntrypoint.stdout).toContain('no totem spec run artifact');
+    },
+  );
+
+  // The opt-in ruling (mmnto-ai/totem#3130), executed on the pre-commit: with the
+  // arming rendered 'off' — the schema default — a shell carrying EVERY marker
+  // commits on the standard arm (no spec-evidence gate), and with it rendered
+  // 'strict' each of the two names mmnto-ai/totem#3042 added arms by itself. RED
+  // on the pre-#3130 template for the first case (any marker armed) and the
+  // second (the two names were not tested).
+  it.skipIf(!shellOk)(
+    'arming off: every marker set at once still commits on the standard arm; arming strict: the two new names each arm alone',
+    () => {
+      const scrubbed: NodeJS.ProcessEnv = { ...process.env };
+      for (const name of AGENT_SHELL_MARKERS) delete scrubbed[name];
+      const everyMarker: NodeJS.ProcessEnv = { ...scrubbed };
+      for (const name of AGENT_SHELL_MARKERS) everyMarker[name] = '1';
+
+      fs.writeFileSync(
+        path.join(tmpDir, 'pre-commit-off'),
+        buildPreCommitHook({ ...RENDER, agentArming: 'off' }),
+      );
+      const off = spawnSync('sh', ['./pre-commit-off'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        env: everyMarker,
+      });
+      expect(off.stdout).not.toContain('no totem spec run artifact');
+      expect(off.status).toBe(0);
+
+      // The armed hook (RENDER renders 'strict'): the whole set blocks, and so
+      // does each new name alone.
+      expect(runHookWith(everyMarker).status).toBe(1);
+      for (const name of ['TOTEM_SELF_AGENT', 'ANTIGRAVITY_AGENT'] as const) {
+        const alone = runHookWith({ ...scrubbed, [name]: 'seat-or-vehicle' });
+        expect(alone.status).toBe(1);
+        expect(alone.stdout).toContain('no totem spec run artifact under .totem/artifacts/runs/');
+      }
+
+      // And the pinned tier still governs every shell: strict tier, arming off,
+      // no marker at all → the gate runs.
+      fs.writeFileSync(
+        path.join(tmpDir, 'pre-commit-strict-tier'),
+        buildPreCommitHook({ ...RENDER, tier: 'strict', agentArming: 'off' }),
+      );
+      const strictTier = spawnSync('sh', ['./pre-commit-strict-tier'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        env: scrubbed,
+      });
+      expect(strictTier.status).toBe(1);
+      expect(strictTier.stdout).toContain('no totem spec run artifact');
     },
   );
 
@@ -4523,6 +4636,9 @@ describe('buildPrePushHook with strict tier', () => {
     expect(hook).toContain('"$CLAUDECODE"');
     expect(hook).toContain('"$CLAUDE_CODE_ENTRYPOINT"');
     expect(hook).toContain('CLAUDE_CODE_AGENT');
+    expect(hook).toContain('"$TOTEM_SELF_AGENT"');
+    expect(hook).toContain('"$ANTIGRAVITY_AGENT"');
+    expect(hook).toContain('if [ "$TOTEM_HOOK_AGENT_ARMING" = "strict" ]; then');
   });
 
   // mmnto-ai/totem#1908 — doctor --strict is wired into the strict-tier
@@ -4785,7 +4901,9 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
     tier: 'strict' | 'standard';
     agent: boolean;
     /** Which marker arms the agent (default the legacy explicit export). */
-    marker?: 'CLAUDECODE' | 'CLAUDE_CODE_ENTRYPOINT';
+    marker?: (typeof AGENT_SHELL_MARKERS)[number];
+    /** The rendered arming (default RENDER's 'strict', the pre-#3130 premise). */
+    agentArming?: 'off' | 'strict';
   }): {
     status: number | null;
     stdout: string;
@@ -4793,25 +4911,25 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
   } {
     fs.writeFileSync(
       path.join(repoDir, 'pre-push'),
-      buildPrePushHook({ ...RENDER, tier: options.tier }),
+      buildPrePushHook({
+        ...RENDER,
+        tier: options.tier,
+        agentArming: options.agentArming ?? RENDER.agentArming,
+      }),
     );
-    // Every agent-detection variable is cleared explicitly: this suite runs
-    // inside an agent session, and an inherited CLAUDECODE=1 (what Claude Code
-    // really exports, mmnto-ai/totem#2706) or CLAUDE_CODE_AGENT would make the
-    // standard-tier cases silently exercise the strict arm.
+    // Every agent-detection variable is cleared explicitly, from the ONE table
+    // the hook renders (mmnto-ai/totem#3130): this suite runs inside an agent
+    // session, and an inherited CLAUDECODE=1 (what Claude Code really exports,
+    // mmnto-ai/totem#2706), CLAUDE_CODE_AGENT or a seat's TOTEM_SELF_AGENT would
+    // make the standard-tier cases silently exercise the strict arm.
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
     };
-    delete env['CLAUDECODE'];
-    delete env['CLAUDE_CODE_ENTRYPOINT'];
-    delete env['CLAUDE_CODE_AGENT'];
-    delete env['CLAUDE_VERSION'];
-    delete env['CURSOR_TRACE_ID'];
+    for (const name of AGENT_SHELL_MARKERS) delete env[name];
     if (options.agent) {
-      if (options.marker === 'CLAUDE_CODE_ENTRYPOINT') env['CLAUDE_CODE_ENTRYPOINT'] = 'cli';
-      else if (options.marker === 'CLAUDECODE') env['CLAUDECODE'] = '1';
-      else env['CLAUDE_CODE_AGENT'] = '1';
+      const marker = options.marker ?? 'CLAUDE_CODE_AGENT';
+      env[marker] = marker === 'CLAUDE_CODE_ENTRYPOINT' ? 'cli' : '1';
     }
     const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
     return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
@@ -4897,6 +5015,64 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
       },
     );
   }
+
+  // The two names mmnto-ai/totem#3042 added to the table, executed: a seat that
+  // declares itself per shell (TOTEM_SELF_AGENT — the Kimi, Codex and Gemini CLI
+  // seats export no vehicle variable) and the one measured vehicle variable
+  // (ANTIGRAVITY_AGENT). RED on the five-name block, where both ran advisory.
+  for (const marker of ['TOTEM_SELF_AGENT', 'ANTIGRAVITY_AGENT'] as const) {
+    it.skipIf(!shellOk)(
+      `a seat shell (${marker} alone) on the standard tier takes the strict arm when the hook is armed`,
+      () => {
+        writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+        const r = runHook({ tier: 'standard', agent: true, marker, agentArming: 'strict' });
+        expect(invocations()).toContain('legs gate');
+        expect(invocations()).not.toContain('legs gate --advisory');
+        expect(r.status).toBe(1);
+        expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+      },
+    );
+  }
+
+  // The opt-in ruling itself (mmnto-ai/totem#3130), executed: with the arming
+  // rendered 'off' — the schema default — EVERY marker in the shell at once still
+  // takes the advisory arm on the standard tier, and nothing strict runs. RED on
+  // the pre-#3130 template, where any one marker armed the strict arm.
+  it.skipIf(!shellOk)(
+    'arming off: a shell carrying every marker on the standard tier takes the advisory arm, nothing strict runs',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+      fs.writeFileSync(
+        path.join(repoDir, 'pre-push'),
+        buildPrePushHook({ ...RENDER, tier: 'standard', agentArming: 'off' }),
+      );
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
+      };
+      for (const name of AGENT_SHELL_MARKERS) env[name] = '1';
+      const r = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
+      // The gate exits 3 ("owed, no deposit") and the advisory arm reads it as a
+      // block too (mmnto-ai/totem#2771) — so what distinguishes the arms here is the
+      // argv the CLI received and the absence of the strict-only steps.
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(invocations()).not.toContain('legs gate');
+      expect(invocations().some((line) => line.startsWith('doctor --strict'))).toBe(false);
+      expect(invocations().some((line) => line.startsWith('review'))).toBe(false);
+      expect(r.stdout).not.toContain('Running doctor --strict');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'arming off does not disarm a strict-tier hook: the pinned tier still governs every shell',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+      const r = runHook({ tier: 'strict', agent: false, agentArming: 'off' });
+      expect(invocations()).toContain('legs gate');
+      expect(invocations()).not.toContain('legs gate --advisory');
+      expect(r.status).toBe(1);
+    },
+  );
 
   it.skipIf(!shellOk)(
     'standard tier, no agent: --advisory is passed and exit 0 proceeds past the arm',
@@ -5110,13 +5286,10 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       ...process.env,
       PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
     };
-    // Scrubbed for the same reason as the arm suite above: this suite runs
-    // inside a Claude Code shell, which exports CLAUDECODE=1 (mmnto-ai/totem#2706).
-    delete env['CLAUDECODE'];
-    delete env['CLAUDE_CODE_ENTRYPOINT'];
-    delete env['CLAUDE_CODE_AGENT'];
-    delete env['CLAUDE_VERSION'];
-    delete env['CURSOR_TRACE_ID'];
+    // Scrubbed for the same reason as the arm suite above, from the one table
+    // (mmnto-ai/totem#3130): this suite runs inside a Claude Code shell, which
+    // exports CLAUDECODE=1 (mmnto-ai/totem#2706), on a seat exporting TOTEM_SELF_AGENT.
+    for (const name of AGENT_SHELL_MARKERS) delete env[name];
     const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
     return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
   }

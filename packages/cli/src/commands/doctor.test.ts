@@ -139,7 +139,12 @@ describe('checkGitHooks', () => {
       buildPostCheckoutHookContent,
       getFallbackCommand,
     } = await import('./install-hooks.js');
-    const render = { tier, totemDir, fallbackCmd: getFallbackCommand(dir) };
+    const render = {
+      tier,
+      agentArming: 'off' as const,
+      totemDir,
+      fallbackCmd: getFallbackCommand(dir),
+    };
     const hooksDir = path.join(dir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
     fs.writeFileSync(path.join(hooksDir, 'pre-commit'), buildPreCommitHook(render));
@@ -182,6 +187,7 @@ describe('checkGitHooks', () => {
     const hooks = await import('./install-hooks.js');
     const render = {
       tier: 'standard' as const,
+      agentArming: 'off' as const,
       totemDir: '.totem',
       fallbackCmd: hooks.getFallbackCommand(dir),
     };
@@ -444,6 +450,7 @@ describe('checkGitHooks', () => {
           withStaleComment(
             buildPrePushHook({
               tier: 'standard',
+              agentArming: 'off',
               totemDir: '.totem',
               fallbackCmd: getFallbackCommand(tmpDir),
             }),
@@ -473,7 +480,11 @@ describe('checkGitHooks', () => {
     ): Promise<void> {
       const { buildPreCommitHook } = await import('./install-hooks.js');
       await installCanonical(dir, othersTotemDir);
-      const block = buildPreCommitHook({ tier: 'standard', totemDir: preCommitTotemDir })
+      const block = buildPreCommitHook({
+        tier: 'standard',
+        agentArming: 'off',
+        totemDir: preCommitTotemDir,
+      })
         .replace(/^#!\/bin\/sh\n/, '')
         .trimStart();
       fs.writeFileSync(
@@ -523,7 +534,11 @@ describe('checkGitHooks', () => {
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         const { buildPreCommitHook } = await import('./install-hooks.js');
         await installCanonical(tmpDir, 'knowledge');
-        const legacy = buildPreCommitHook({ tier: 'standard', totemDir: '.totem' })
+        const legacy = buildPreCommitHook({
+          tier: 'standard',
+          agentArming: 'off',
+          totemDir: '.totem',
+        })
           .split('\n')
           .filter((line) => !line.includes('[totem] end pre-commit'))
           .join('\n');
@@ -554,6 +569,75 @@ describe('checkGitHooks', () => {
       }
     });
 
+    // The agent arming IS an axis of the compare (mmnto-ai/totem#3130), unlike the
+    // tier: the key has no flag spelling, so a hook rendered at the other value is
+    // drift between the tracked config and the installed hook. Both directions,
+    // and the remedy is the shape's re-render.
+    it('a hook rendered at the other agent arming than the config declares is drift, both ways', async () => {
+      for (const [installed, configured] of [
+        ['off', 'strict'],
+        ['strict', 'off'],
+      ] as const) {
+        const tmpDir = makeTmpDir();
+        try {
+          execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+          const hooks = await import('./install-hooks.js');
+          const render = {
+            tier: 'standard' as const,
+            agentArming: installed,
+            totemDir: '.totem',
+            fallbackCmd: hooks.getFallbackCommand(tmpDir),
+          };
+          const hooksDir = path.join(tmpDir, '.git', 'hooks');
+          fs.mkdirSync(hooksDir, { recursive: true });
+          fs.writeFileSync(path.join(hooksDir, 'pre-commit'), hooks.buildPreCommitHook(render));
+          fs.writeFileSync(path.join(hooksDir, 'pre-push'), hooks.buildPrePushHook(render));
+          fs.writeFileSync(path.join(hooksDir, 'post-merge'), hooks.buildHookContent(render));
+          fs.writeFileSync(
+            path.join(hooksDir, 'post-checkout'),
+            hooks.buildPostCheckoutHookContent(render),
+          );
+          // Matching config → clean; the other value → the two enforcement hooks drift.
+          expect((await checkGitHooks(tmpDir, { hooks: { agentArming: installed } })).status).toBe(
+            'pass',
+          );
+          const drift = await checkGitHooks(tmpDir, { hooks: { agentArming: configured } });
+          expect(drift.status).toBe('warn');
+          expect(drift.message).toContain('pre-commit');
+          expect(drift.message).toContain('pre-push');
+          expect(drift.message).not.toContain('post-merge');
+          // Shape-specific: these are totem-owned WHOLE files, whose cure is --force.
+          expect(drift.remediation).toMatch(/^totem hook install --force/);
+        } finally {
+          cleanTmpDir(tmpDir);
+        }
+      }
+    });
+
+    it('an unset agentArming compares as off: a hook rendered off is clean, one rendered strict is drift', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installCanonical(tmpDir, '.totem'); // installCanonical renders 'off'
+        expect((await checkGitHooks(tmpDir)).status).toBe('pass');
+        const hooks = await import('./install-hooks.js');
+        fs.writeFileSync(
+          path.join(tmpDir, '.git', 'hooks', 'pre-push'),
+          hooks.buildPrePushHook({
+            tier: 'standard',
+            agentArming: 'strict',
+            totemDir: '.totem',
+            fallbackCmd: hooks.getFallbackCommand(tmpDir),
+          }),
+        );
+        const drift = await checkGitHooks(tmpDir);
+        expect(drift.status).toBe('warn');
+        expect(drift.message).toContain('pre-push');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
     // Pass-2 F3: the tier is read from the TOTEM-OWNED block, not the whole file —
     // a user's own line carrying `TOTEM_HOOK_TIER="strict"` above an appended
     // standard block must not turn a matching hook into "totemDir drift".
@@ -565,6 +649,7 @@ describe('checkGitHooks', () => {
         await installCanonical(tmpDir, 'knowledge');
         const block = buildPrePushHook({
           tier: 'standard',
+          agentArming: 'off',
           totemDir: 'knowledge',
           fallbackCmd: getFallbackCommand(tmpDir),
         })
@@ -589,7 +674,11 @@ describe('checkGitHooks', () => {
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         const { buildPreCommitHook } = await import('./install-hooks.js');
         await installCanonical(tmpDir, 'knowledge');
-        const legacyBlock = buildPreCommitHook({ tier: 'standard', totemDir: '.totem' })
+        const legacyBlock = buildPreCommitHook({
+          tier: 'standard',
+          agentArming: 'off',
+          totemDir: '.totem',
+        })
           .split('\n')
           .filter((line) => !line.includes('[totem] end pre-commit'))
           .join('\n')
@@ -805,7 +894,7 @@ describe('checkGitHooks', () => {
         // an attested extension BELOW its end marker.
         await installCanonical(tmpDir, '.totem');
         const staleBlock = withStaleComment(
-          buildPreCommitHook({ tier: 'standard', totemDir: '.totem' }),
+          buildPreCommitHook({ tier: 'standard', agentArming: 'off', totemDir: '.totem' }),
           TOTEM_PRECOMMIT_END,
         )
           .replace(/^#!\/bin\/sh\n/, '')
@@ -844,6 +933,7 @@ describe('checkGitHooks', () => {
         const hooks = await import('./install-hooks.js');
         const render = {
           tier: 'standard' as const,
+          agentArming: 'off' as const,
           totemDir: '.totem',
           fallbackCmd: hooks.getFallbackCommand(tmpDir),
         };
@@ -909,6 +999,7 @@ describe('checkGitHooks', () => {
         const hooks = await import('./install-hooks.js');
         const render = {
           tier: 'standard' as const,
+          agentArming: 'off' as const,
           totemDir: '.totem',
           fallbackCmd: hooks.getFallbackCommand(tmpDir),
         };
@@ -949,6 +1040,7 @@ describe('checkGitHooks', () => {
         const hooks = await import('./install-hooks.js');
         const render = {
           tier: 'standard' as const,
+          agentArming: 'off' as const,
           totemDir: '.totem',
           fallbackCmd: hooks.getFallbackCommand(tmpDir),
         };
@@ -996,6 +1088,7 @@ describe('checkGitHooks', () => {
         const hooks = await import('./install-hooks.js');
         const render = {
           tier: 'standard' as const,
+          agentArming: 'off' as const,
           totemDir: '.totem',
           fallbackCmd: hooks.getFallbackCommand(tmpDir),
         };
@@ -1003,7 +1096,7 @@ describe('checkGitHooks', () => {
         const hooksDir = path.join(tmpDir, '.git', 'hooks');
         // appended: user lines above a stale block.
         const staleBlock = withStaleComment(
-          hooks.buildPreCommitHook({ tier: 'standard', totemDir: '.totem' }),
+          hooks.buildPreCommitHook({ tier: 'standard', agentArming: 'off', totemDir: '.totem' }),
           hooks.TOTEM_PRECOMMIT_END,
         )
           .replace(/^#!\/bin\/sh\n/, '')
@@ -1386,6 +1479,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Stray Markers',
   'Estate',
   'Seat Identity',
+  'Agent Arming',
 ] as const;
 
 /**
