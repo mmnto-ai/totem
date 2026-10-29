@@ -367,9 +367,12 @@ describe('resolveHookRenderOptions — the one config→render seam (C1)', () =>
     writeConfig(`${BASE_TARGETS}hooks:\n  agentArming: strict\n`);
     const armed = await resolveHookRenderOptions(tmpDir);
     expect(armed.agentArming).toBe('strict');
-    // The tier stays the schema default; a `hooks` block carrying only the arming
-    // does not change which tier the hooks render at.
+    // A `hooks` block carrying only the arming declares NO tier: the default is
+    // applied, and nothing is pinned, so `tierForHook` keeps an installed hook's
+    // own tier (the leg's F1 on mmnto-ai/totem#3130; RED while the schema gave
+    // `tier` a default, which the resolver read as a pin).
     expect(armed.tier).toBe('standard');
+    expect(armed.tierPinned).toBeUndefined();
     expect(buildPreCommitHook(armed)).toContain('\nTOTEM_HOOK_AGENT_ARMING="strict"\n');
     expect(buildPrePushHook(armed)).toContain('\nTOTEM_HOOK_AGENT_ARMING="strict"\n');
 
@@ -395,6 +398,19 @@ describe('resolveHookRenderOptions — the one config→render seam (C1)', () =>
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  it('only a DECLARED tier pins one: a legsOwed-only block pins nothing, `tier: standard` does (mmnto-ai/totem#3130 F1)', async () => {
+    writeConfig(`${BASE_TARGETS}hooks:\n  legsOwed:\n    enforce: block\n`);
+    const legsOnly = await resolveHookRenderOptions(tmpDir);
+    expect(legsOnly.tier).toBe('standard');
+    expect(legsOnly.tierPinned).toBeUndefined();
+
+    writeConfig(`${BASE_TARGETS}hooks:\n  tier: standard\n  agentArming: strict\n`);
+    const declared = await resolveHookRenderOptions(tmpDir);
+    expect(declared.tier).toBe('standard');
+    expect(declared.tierPinned).toBe(true);
+    expect(declared.agentArming).toBe('strict');
   });
 
   it('an explicit tier flag leaves the configured arming alone', async () => {

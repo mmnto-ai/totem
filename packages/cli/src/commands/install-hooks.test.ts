@@ -2315,6 +2315,71 @@ describe('installHooksNonInteractive', () => {
     );
   });
 
+  // mmnto-ai/totem#3130 (the leg's F1, reproduced before the fold): with a schema
+  // default on `hooks.tier`, a config carrying ONLY `hooks.agentArming` parsed with
+  // `tier: 'standard'`, the resolver read that as a PIN, and a bare re-render
+  // downgraded a `--strict`-installed hook to standard with nothing saying so —
+  // the mmnto-ai/totem#2753 downgrade, reached through the key this build adds and
+  // the remedy its doctor row prints. RED on the pre-fold tree.
+  it('a config declaring only hooks.agentArming does not pin the tier: a strict-installed hook survives a bare re-render and gains the arming', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    const first = await installHooksNonInteractive(tmpDir, false, { tier: 'strict' });
+    expect(first!.preCommit).toBe('installed');
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    const before = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    expect(before).toContain('\nTOTEM_HOOK_TIER="strict"\n');
+    expect(before).toContain('\nTOTEM_HOOK_AGENT_ARMING="off"\n');
+
+    // The repository then declares the arming — and nothing else — in its config.
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.yaml'),
+      'targets:\n  - glob: "docs/*.md"\n    type: lesson\n    strategy: markdown-heading\nhooks:\n  agentArming: strict\n',
+      'utf-8',
+    );
+    const again = await installHooksNonInteractive(tmpDir);
+    for (const [hook, marker, end] of [
+      ['pre-commit', TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END],
+      ['pre-push', TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END],
+    ] as const) {
+      const content = fs.readFileSync(path.join(hooksDir, hook), 'utf-8');
+      expect(declaredHookTier(content, marker, end), hook).toBe('strict');
+      expect(content, hook).toContain('\nTOTEM_HOOK_AGENT_ARMING="strict"\n');
+    }
+    expect(again!.prePush).toBe('overwritten');
+
+    // And a block that declares only the legs knob — every cohort config's shape —
+    // pins nothing either (the pre-existing reach of the same defect).
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.yaml'),
+      'targets:\n  - glob: "docs/*.md"\n    type: lesson\n    strategy: markdown-heading\nhooks:\n  legsOwed:\n    enforce: block\n',
+      'utf-8',
+    );
+    await installHooksNonInteractive(tmpDir);
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8'),
+        TOTEM_PREPUSH_MARKER,
+        TOTEM_PREPUSH_END,
+      ),
+    ).toBe('strict');
+
+    // A DECLARED standard tier still pins — the repo asked for it.
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.yaml'),
+      'targets:\n  - glob: "docs/*.md"\n    type: lesson\n    strategy: markdown-heading\nhooks:\n  tier: standard\n',
+      'utf-8',
+    );
+    await installHooksNonInteractive(tmpDir);
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8'),
+        TOTEM_PREPUSH_MARKER,
+        TOTEM_PREPUSH_END,
+      ),
+    ).toBe('standard');
+  });
+
   it('lets an explicit tier flag win over the installed hook declaration', async () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');

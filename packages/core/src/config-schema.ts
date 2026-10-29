@@ -748,8 +748,16 @@ export const TotemConfigSchema = z.object({
        *  agent shell arms the strict tier on a standard-tier install only when
        *  `agentArming` below says so (mmnto-ai/totem#3130). The tier is rendered
        *  into the hook at install, so re-run `totem hook install --force` after
-       *  changing it (mmnto-ai/totem#2692). */
-      tier: z.enum(['strict', 'standard']).default('standard'),
+       *  changing it (mmnto-ai/totem#2692).
+       *
+       *  ABSENT ⇒ `'standard'`, applied by every reader — and deliberately NOT a
+       *  schema default (mmnto-ai/totem#3130, the leg's finding): a default here
+       *  made any `hooks` block at all parse WITH a tier, so a block carrying only
+       *  `legsOwed`, `shield` or `agentArming` PINNED the tier to standard, and a
+       *  bare or forced re-render then silently downgraded a hook installed with
+       *  `--strict` — the downgrade mmnto-ai/totem#2753 ruled against. Only a
+       *  declared tier pins one; "nobody said" stays representable. */
+      tier: z.enum(['strict', 'standard']).optional(),
 
       /** Whether an AI-agent shell arms the STRICT tier on a repository whose
        *  `tier` is `'standard'` (mmnto-ai/totem#3130, designed with

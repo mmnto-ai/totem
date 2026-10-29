@@ -540,8 +540,11 @@ export interface HookRenderOptions {
 
 /** {@link HookRenderOptions} plus the config file they were derived from. */
 export interface ResolvedHookRenderOptions extends HookRenderOptions {
-  /** Set when `tier` was PINNED by an explicit flag or by `hooks.tier` in config,
-   *  rather than falling through to the `'standard'` default. Callers that rewrite
+  /** Set when `tier` was PINNED by an explicit flag or by a DECLARED `hooks.tier` in
+   *  config, rather than falling through to the `'standard'` default. A `hooks`
+   *  block that declares no tier pins nothing: the schema gives `tier` no default
+   *  (mmnto-ai/totem#3130), because a parsed-in default made every such block a pin
+   *  and a bare re-render then downgraded a `--strict` install. Callers that rewrite
    *  an EXISTING hook use this to tell "the repo asked for standard" apart from
    *  "nobody said" — only in the second case may the installed hook's own declared
    *  tier decide, which is what stops a bare install from silently downgrading a
