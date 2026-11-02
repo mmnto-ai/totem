@@ -195,10 +195,11 @@ describe('getDiffBetween', () => {
     mockSafeExec.mockReturnValueOnce('diff --git a/foo.ts b/foo.ts\n+const x = 1;');
     const result = getDiffBetween('/tmp', 'abc123');
     expect(result).toContain('+const x = 1;');
-    expect(mockSafeExec).toHaveBeenCalledWith('git', ['diff', 'abc123', 'HEAD'], {
-      cwd: '/tmp',
-      maxBuffer: 10 * 1024 * 1024,
-    });
+    expect(mockSafeExec).toHaveBeenCalledWith(
+      'git',
+      ['diff', ...totemMod.GIT_DIFF_PORCELAIN_ARGS, 'abc123', 'HEAD'],
+      { cwd: '/tmp', maxBuffer: 10 * 1024 * 1024 },
+    );
   });
 
   it('returns empty string on error', () => {

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "5988b53813493cefa9166c1b813995457875d5f6",
+  "readAt": "2026-11-02T20:04:10Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/diff-parser.ts",
+      "line": 122,
+      "claim": "diff.suppressBlankEmpty=true is not neutralized by the four pins (no CLI flag exists); an empty context line is skipped by the parser, shifting lineNumber and carrying a totem-ignore-next-line across a blank line so a violation is suppressed",
+      "counterexample": "branch dist, pinned getGitDiffRange: default [console.log(1);,4,''] vs suppressBlankEmpty [console.log(1);,3,'// totem-ignore-next-line']"
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 26,
+      "claim": "JSDoc on exported GIT_DIFF_PORCELAIN_ARGS says list-form diffs carry the list and the census needs no exemption table; code leaves them unpinned and the census exempts them via LIST_FORM_FLAGS; test header also lists -z as flag-exempt though LIST_FORM_FLAGS lacks it",
+      "counterexample": "git-porcelain.test.ts:132 LIST_FORM_FLAGS; cli git.ts getNameStatus/getShortstat unpinned"
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 17,
+      "claim": "--no-ext-diff does not disable diff.<driver>.textconv; pinned git diff and git log -p print textconv output while blob reads print raw content; a failing textconv makes the diff fatal",
+      "counterexample": "*.txt diff=up with textconv sed y/abcd/ABCD/: pinned diff shows +D, git show HEAD:f.txt shows a, --no-textconv shows +d"
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/utils.ts",
+      "line": 93,
+      "claim": "diff.relative=true rewrites header paths and drops outside changes when cwd is a subdirectory; pins do not neutralize it, --no-relative would; also affects --name-only so the exemption measurement is bounded",
+      "counterexample": "from subdir b/: pinned diff prints diff --git a/x.ts b/x.ts for repo path b/x.ts"
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git-porcelain.test.ts",
+      "line": 153,
+      "claim": "census reach is narrower than the changeset's 'refuses any new patch-producing git diff spawn'",
+      "counterexample": "missed: ['diff'], double quotes, ['-C', dir, 'diff', ...], log --patch/-u/--stat/--cc, ['log', refs[0], '-p'], ['diff','--stat','--numstat'] (coloured yet exempt)"
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".totem/specs/3113.md",
+      "line": 129,
+      "claim": "design invariant names 5 readers under each of 5 settings; behavioral tests cover 5 reader-setting pairs and getDiffBetween only by mocked argv",
+      "counterexample": ""
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/diff-parser.ts",
+      "line": 117,
+      "claim": "diff.context=0 (or GIT_DIFF_OPTS) leaves precedingLine null for the first addition of a hunk so a totem-ignore-next-line on an unchanged line is missed (fail-closed false FAIL); -U3 would pin it",
+      "counterexample": "branch dist: diff.context=0 gives [console.log(1);,4,null]"
+    },
+    {
+      "id": "F8",
+      "severity": "QUESTION",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 0,
+      "claim": "does diff.submodule=diff inline submodule patches into the gate's diff; unmeasured; --submodule=short would pin it",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "verdict": "blocking=0 material=2 minor=5 question=1; convergence named on the pin mechanism for its named settings (placement, census position, exemptions measured); F1 is an un-flaggable same-class gap the seat should rule fold-or-file"
+}

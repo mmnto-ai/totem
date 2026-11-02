@@ -18,6 +18,7 @@ import * as path from 'node:path';
 
 import type { ResolvedPrInput } from '@mmnto/totem';
 
+import { GIT_DIFF_PORCELAIN_ARGS } from '../git.js';
 import { computeFixtureSha, enumeratePrMetas } from './spine-windtunnel.js';
 
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
@@ -62,7 +63,7 @@ export function resolvePrGit(
     `rev-parse parent of ${mergeCommit}`,
   ).trim();
   const diff = gitText(
-    ['diff', '--no-color', '--no-ext-diff', '--end-of-options', baseSha, headSha],
+    ['diff', ...GIT_DIFF_PORCELAIN_ARGS, '--end-of-options', baseSha, headSha],
     lcDir,
     safeExec,
     `diff ${baseSha}..${headSha}`,

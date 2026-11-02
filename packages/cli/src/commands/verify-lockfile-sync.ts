@@ -1,3 +1,5 @@
+import { GIT_DIFF_PORCELAIN_ARGS } from '../git.js';
+
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'VerifyLockfileSync';
@@ -493,10 +495,14 @@ function findRemovedPins(
 ): string[] {
   let lockfileDiff: string;
   try {
-    lockfileDiff = safeExec('git', ['diff', `${resolvedRef}...HEAD`, '--', LOCKFILE_PATH], {
-      cwd: repoRoot,
-      timeout: AUX_LOOKUP_TIMEOUT_MS,
-    });
+    lockfileDiff = safeExec(
+      'git',
+      ['diff', ...GIT_DIFF_PORCELAIN_ARGS, `${resolvedRef}...HEAD`, '--', LOCKFILE_PATH],
+      {
+        cwd: repoRoot,
+        timeout: AUX_LOOKUP_TIMEOUT_MS,
+      },
+    );
     // totem-context: declared-skip probe — failure means the removed-pin check cannot evaluate, so it announces the skip and passes rather than blocking (mmnto/totem#1440 Tenet 4 init-class)
   } catch {
     log.info(TAG, `Could not read the ${LOCKFILE_PATH} diff — skipping the removed-pin check.`);
@@ -672,7 +678,7 @@ export async function verifyLockfileSyncCommand(): Promise<VerifyLockfileSyncRes
   try {
     unifiedDiff = safeExec(
       'git',
-      ['diff', `${resolvedRef}...HEAD`, '--', ...workspacePkgJsonPaths],
+      ['diff', ...GIT_DIFF_PORCELAIN_ARGS, `${resolvedRef}...HEAD`, '--', ...workspacePkgJsonPaths],
       {
         cwd: repoRoot,
         timeout: AUX_LOOKUP_TIMEOUT_MS,

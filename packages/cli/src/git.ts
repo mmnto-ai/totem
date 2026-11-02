@@ -12,11 +12,14 @@ export {
   getGitStatus,
   getLatestTag,
   getTagDate,
+  // The porcelain pins (mmnto-ai/totem#3113): command modules read them from
+  // here, not from the core barrel, which stays out of their static imports.
+  GIT_DIFF_PORCELAIN_ARGS,
   isFileDirty,
   resolveGitRoot,
 } from '@mmnto/totem';
 
-import { safeExec } from '@mmnto/totem';
+import { GIT_DIFF_PORCELAIN_ARGS, safeExec } from '@mmnto/totem';
 
 // ─── Incremental shield helpers (#1010) ─────────────────
 
@@ -80,7 +83,10 @@ export function getNameStatus(
  */
 export function getDiffBetween(cwd: string, base: string, head?: string): string {
   try {
-    return safeExec('git', ['diff', base, head ?? 'HEAD'], { cwd, maxBuffer: 10 * 1024 * 1024 });
+    return safeExec('git', ['diff', ...GIT_DIFF_PORCELAIN_ARGS, base, head ?? 'HEAD'], {
+      cwd,
+      maxBuffer: 10 * 1024 * 1024,
+    });
   } catch {
     return '';
   }

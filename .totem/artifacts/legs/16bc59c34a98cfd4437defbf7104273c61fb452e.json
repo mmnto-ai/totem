@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "16bc59c34a98cfd4437defbf7104273c61fb452e",
+  "readAt": "2026-11-02T20:41:55Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 38,
+      "claim": "the git 2.28 floor text says an older git refuses every pinned read loudly, but getGitDiffStat and getDiffBetween return empty, verify-lockfile-sync returns valid true or skips, and extract-local reports no local changes when the unknown-option error is caught",
+      "counterexample": "git older than 2.28: verify-lockfile-sync.ts:681 catch returns valid true, a silent PASS of the dependency-pin check that worked on main"
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git-porcelain.test.ts",
+      "line": 378,
+      "claim": "the census and changeset treat a patch or stat spelling beside --name-only or --name-status as producing a patch, but git suppresses patch and stat under those two flags; the fixture line encodes the wrong model (over-strict, fails safe)",
+      "counterexample": "git diff --name-only -U3 A B and git diff --name-status -p A B print names only, zero diff --git lines, measured on git 2.56"
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git-porcelain.test.ts",
+      "line": 200,
+      "claim": "--word-diff is listed as a spelling by which git log prints a patch, but git log --word-diff alone prints no patch (over-strict, fails safe)",
+      "counterexample": "git log -1 --word-diff and --word-diff=plain print zero diff --git lines on git 2.56"
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git-porcelain.test.ts",
+      "line": 203,
+      "claim": "the census still misses patch or stat spellings and exempts a coloured list-form argv (fails open, none in the tree today)",
+      "counterexample": "git log --stat-width=40, --stat-count=1, --compact-summary, --binary, --patch-with-raw, -L1,2:f each print a patch or stat and pass unflagged; diff --numstat --compact-summary is exempted yet prints escapes under color.ui always"
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": ".changeset/git-diff-porcelain-pins.md",
+      "line": 6,
+      "claim": "the changeset says a regex literal carrying a quote desynchronises the scanner only to its line end, but a backtick in a regex still opens a template state that spans lines",
+      "counterexample": "const r = /BACKTICK/; then safeExec git diff HEAD on the next line is unseen on both the old and the new scanner"
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".totem/specs/3113.md",
+      "line": 136,
+      "claim": "the invariant says the self-test hands the scanner eighteen lines where the fixture has nineteen, and the first fold item 4 still says thirteen shapes and eight named though the fold says each stale line was corrected",
+      "counterexample": "fixture array at git-porcelain.test.ts has 19 elements; spec line 160 unchanged"
+    },
+    {
+      "id": "F7",
+      "severity": "QUESTION",
+      "file": "packages/core/src/sys/git-porcelain.test.ts",
+      "line": 0,
+      "claim": "the worktree carries an uncommitted rewrite of the census to a TypeScript syntax-tree walk that this read did not judge; does it get its own scoped read with a differential case table from the 16bc59c3 fixture",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7"
+  ],
+  "verdict": "blocking=0 material=1 minor=5 question=1; convergence named on the seven-pin list and the stat read (byte-identical on 15 forms from two cwds with a submodule, stat assertion RED under --unified=3), not on the census spelling model (F2-F4) or the floor wording (F1)"
+}

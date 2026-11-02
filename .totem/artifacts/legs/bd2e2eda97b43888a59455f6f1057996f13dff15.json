@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "bd2e2eda97b43888a59455f6f1057996f13dff15",
+  "readAt": "2026-11-02T20:24:31Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 137,
+      "claim": "--unified=3 implies --patch, so getGitDiffStat (and any pinned --stat/--shortstat/--numstat) now returns the stat plus the full patch on a default config; the JSDoc and changeset byte-identical claim is false, handoff writes the patch into the journal, the color.ui test cannot see it and the census mandates the shape",
+      "counterexample": "default config: git diff <8 pins> HEAD --stat prints the stat then diff --git ...; branch dist getGitDiffStat 20 lines with a patch vs main 3 lines"
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": ".totem/specs/3113.md",
+      "line": 156,
+      "claim": "fold item 5 says the 5x5 invariant was reworded but the diff does not touch it; the spec still says four literal flags (109), exactly the four flags (132), not in scope any change to the diff parser, no failure-mode rows for the new settings, and thirteen shapes and eight where the test has fifteen and nine",
+      "counterexample": "git diff 80e7c5d4 bd2e2eda -- .totem/specs/3113.md touches only the Scope paragraph and the appended folds"
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-eval.integration.test.ts",
+      "line": 165,
+      "claim": "the spec says the cli shield integration fixture never carries an empty line inside a hunk; EXPECTED_DIFF does, and the fold moves its additions' line numbers by one (new value correct, unasserted)",
+      "counterexample": "old parser console.log lineNumber 4 vs new 5 on the same hunk structure"
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/diff-parser.test.ts",
+      "line": 36,
+      "claim": "the outside-hunk test cannot tell the insideHunk guard from an unguarded predicate and its between-file-blocks blank is inside a hunk and is counted",
+      "counterexample": "ported parser counting every empty line yields the identical expected array"
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git-porcelain.test.ts",
+      "line": 158,
+      "claim": "textconv negative assertion is vacuous (sed y/abcd/ABCD/ maps abce to ABCe, never ABCE) and the context-0 hunk regex also passes for --unified=1 or 2",
+      "counterexample": "expect(diff).not.toContain('ABCE') holds under textconv on main"
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git-porcelain.test.ts",
+      "line": 212,
+      "claim": "the census scanner has no regex-literal handling, so a quote or double slash in a regex hides later argv in the file, and it misses --stat=N, -U/--unified=N, --word-diff and a --git-dir pair; the changeset says it reads every array-literal argv",
+      "counterexample": "const q = s.replace(/'/g, ''); then safeExec('git', ['diff', 'HEAD']) on the next line is unseen and unreported"
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 34,
+      "claim": "seven of the values are git's own defaults is wrong for --no-ext-diff (git diff allows ext-diff by default, the same class as --no-textconv), and diff.context below 3 overstates: only 0 hides the directive line",
+      "counterexample": "diff-options.adoc 830-836: --ext-diff allowed for git diff, needed for git log"
+    },
+    {
+      "id": "F8",
+      "severity": "QUESTION",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 52,
+      "claim": "--no-relative arrived with diff.relative in git 2.28 (RelNotes 2.28.0); on an older git every pinned read may be fatal and the spec's git-version row lists only the first four flags; unmeasured on an old git",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "verdict": "blocking=1 material=0 minor=6 question=1; convergence named on the parser predicate (correct on every git-emittable input measured), not on the widened list (F1: --unified=3 makes every stat read print a patch)"
+}

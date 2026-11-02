@@ -1,6 +1,7 @@
 import type { ExtractedLesson, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore, TotemConfigError } from '@mmnto/totem';
 
+import { GIT_DIFF_PORCELAIN_ARGS } from '../git.js';
 import { log } from '../ui.js';
 import {
   formatResults,
@@ -104,13 +105,21 @@ export async function extractFromLocal(
       let unpushed = '';
       if (currentBranch && currentBranch !== 'HEAD') {
         try {
-          unpushed = exec('git', ['log', '-p', `origin/${currentBranch}..HEAD`], { cwd });
+          unpushed = exec(
+            'git',
+            ['log', ...GIT_DIFF_PORCELAIN_ARGS, '-p', `origin/${currentBranch}..HEAD`],
+            { cwd },
+          );
         } catch {
           // Remote tracking branch may not exist — fall back to default branch
         }
       }
       if (!unpushed) {
-        unpushed = exec('git', ['log', '-p', `origin/${defaultBranch}..HEAD`], { cwd });
+        unpushed = exec(
+          'git',
+          ['log', ...GIT_DIFF_PORCELAIN_ARGS, '-p', `origin/${defaultBranch}..HEAD`],
+          { cwd },
+        );
       }
       if (unpushed) {
         diff = unpushed;

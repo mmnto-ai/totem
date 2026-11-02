@@ -61,12 +61,29 @@ import {
   getGitStatusPorcelainRaw,
   getLatestTag,
   getTagDate,
+  GIT_DIFF_PORCELAIN_ARGS,
   inferScopeFromFiles,
   isFileDirty,
   mainCheckoutFromGitFileSync,
   resolveGitRoot,
   resolveTotemRepoRootSync,
 } from './git.js';
+
+describe('GIT_DIFF_PORCELAIN_ARGS (mmnto-ai/totem#3113)', () => {
+  it('is the seven porcelain pins, each fixing one output property a config key can rewrite', () => {
+    // No `--unified`: it implies `--patch`, which would turn the stat read into
+    // a patch (the second falsification read's blocking finding).
+    expect([...GIT_DIFF_PORCELAIN_ARGS]).toEqual([
+      '--no-ext-diff',
+      '--no-textconv',
+      '--no-color',
+      '--no-relative',
+      '--submodule=short',
+      '--src-prefix=a/',
+      '--dst-prefix=b/',
+    ]);
+  });
+});
 
 describe('getLatestTag', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -112,7 +129,7 @@ describe('getGitDiffRange (#1717)', () => {
     expect(result).toContain('+const x = 1;');
     expect(vi.mocked(crossSpawn.sync)).toHaveBeenCalledWith(
       'git',
-      ['diff', 'HEAD^..HEAD'],
+      ['diff', ...GIT_DIFF_PORCELAIN_ARGS, 'HEAD^..HEAD'],
       expect.any(Object),
     );
   });
@@ -122,7 +139,7 @@ describe('getGitDiffRange (#1717)', () => {
     getGitDiffRange('/tmp', '  main...feature  ');
     expect(vi.mocked(crossSpawn.sync)).toHaveBeenCalledWith(
       'git',
-      ['diff', 'main...feature'],
+      ['diff', ...GIT_DIFF_PORCELAIN_ARGS, 'main...feature'],
       expect.any(Object),
     );
   });
@@ -159,7 +176,8 @@ describe('getGitBranchDiff base-ref resolution (#2054)', () => {
    */
   function routeDiffByRef(routes: Record<string, { ok?: string; fail?: string }>): void {
     vi.mocked(crossSpawn.sync).mockImplementation((_command, args) => {
-      const range = (args ?? [])[1] ?? ''; // args === ['diff', '<ref>...HEAD']
+      // args === ['diff', ...GIT_DIFF_PORCELAIN_ARGS, '<ref>...HEAD']: the range is the last element.
+      const range = (args ?? []).at(-1) ?? '';
       const outcome = routes[range.replace(/\.\.\.HEAD$/, '')];
       let result;
       if (!outcome) result = fail(new Error(`unexpected git call: ${(args ?? []).join(' ')}`));
@@ -182,7 +200,7 @@ describe('getGitBranchDiff base-ref resolution (#2054)', () => {
     expect(vi.mocked(crossSpawn.sync)).toHaveBeenNthCalledWith(
       1,
       'git',
-      ['diff', 'origin/main...HEAD'],
+      ['diff', ...GIT_DIFF_PORCELAIN_ARGS, 'origin/main...HEAD'],
       expect.any(Object),
     );
   });
@@ -197,7 +215,7 @@ describe('getGitBranchDiff base-ref resolution (#2054)', () => {
     expect(vi.mocked(crossSpawn.sync)).toHaveBeenNthCalledWith(
       1,
       'git',
-      ['diff', 'origin/main...HEAD'],
+      ['diff', ...GIT_DIFF_PORCELAIN_ARGS, 'origin/main...HEAD'],
       expect.any(Object),
     );
   });
@@ -235,7 +253,8 @@ describe('getGitBranchDiffResult resolved-base coupling (mmnto-ai/totem#2106 rev
 
   function routeDiffByRef(routes: Record<string, { ok?: string; fail?: string }>): void {
     vi.mocked(crossSpawn.sync).mockImplementation((_command, args) => {
-      const range = (args ?? [])[1] ?? '';
+      // The range is the last element: ['diff', ...GIT_DIFF_PORCELAIN_ARGS, '<ref>...HEAD'].
+      const range = (args ?? []).at(-1) ?? '';
       const outcome = routes[range.replace(/\.\.\.HEAD$/, '')];
       let result;
       if (!outcome) result = fail(new Error(`unexpected git call: ${(args ?? []).join(' ')}`));

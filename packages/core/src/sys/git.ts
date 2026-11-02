@@ -13,6 +13,61 @@ const GIT_COMMAND_TIMEOUT_MS = 15_000;
 const GIT_DIFF_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — large diffs (e.g., compiled-rules.json)
 
 /**
+ * The porcelain pins every patch- or stat-producing `git diff` (and `git log
+ * -p`) Totem reads carries, spread directly after the subcommand and before
+ * any ref, option or `--` (mmnto-ai/totem#3113). A user's or repository's git
+ * config otherwise rewrites the text the parsers assume, and each flag fixes
+ * one output property for one such key, measured on git 2.56: `diff.external`
+ * (and the `GIT_EXTERNAL_DIFF` variable) replaces the patch with a tool's
+ * output, so the gate finds no additions and passes a pushed violation; a
+ * `diff=<driver>` attribute with `diff.<driver>.textconv` shows converted text
+ * where the blob readers see the file's bytes, and a failing converter makes
+ * the diff fatal; `color.ui always` wraps the headers in escape sequences
+ * (`Changed files (0)`); `diff.relative` with a subdirectory as the working
+ * directory strips the path prefix and drops every change outside it;
+ * `diff.submodule=diff` inlines a submodule's own patch under this
+ * repository's headers; and `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`
+ * and `diff.mnemonicPrefix` change the `a/` and `b/` labels the header parsers
+ * read as the repository path, so a blob read fails on a path that does not
+ * exist. On a default config the list changes nothing (measured byte-identical
+ * against the unpinned output on the patch, staged, range, `--stat`,
+ * `--shortstat`, `--numstat` and `git log -p` forms): five of the values are
+ * git's own defaults, and `--no-ext-diff` and `--no-textconv` turn off
+ * behaviours git allows by default that are in force only once an external
+ * command or a converter is configured. `--no-relative` arrived in git 2.28,
+ * the floor this list sets. Below it git refuses the argv as an unknown
+ * option: the gate's patch readers (`getGitDiff`, `getGitBranchDiffResult`,
+ * `getGitDiffRange`) throw that error, while `getGitDiffStat`, the cli's
+ * `getDiffBetween`, the lockfile-sync gate's two reads and the local extractor
+ * catch their git errors by design and go quiet (an empty stat, an empty diff,
+ * a passed pin check, "no local changes"), as they already did on any other
+ * git failure.
+ *
+ * Two same-class keys are not pinned. `diff.suppressBlankEmpty` has no flag:
+ * it prints an empty context line as an empty string, and the diff parser
+ * counts that line as context (packages/core/src/diff-parser.ts) rather than
+ * reaching for a `-c` override, which could not live in this list.
+ * `diff.context 0` hides the unchanged line a `totem-ignore-next-line` sits on,
+ * a false FAIL that names its file and line; its flag `--unified=3` implies
+ * `--patch` and turned the stat read into a patch, so it is not here.
+ *
+ * The list-form diffs (`--name-only`, `--name-status`, `--numstat`,
+ * `--shortstat`) were measured unaffected by every setting above and are left
+ * unpinned; the census test over the sources (git-porcelain.test.ts) exempts
+ * them by their flag and requires the list on every other `git diff` and on
+ * every `git log` that prints a patch or a stat.
+ */
+export const GIT_DIFF_PORCELAIN_ARGS = [
+  '--no-ext-diff',
+  '--no-textconv',
+  '--no-color',
+  '--no-relative',
+  '--submodule=short',
+  '--src-prefix=a/',
+  '--dst-prefix=b/',
+] as const;
+
+/**
  * Bound on the cause-chain walk in {@link containsNotAGitRepo}. Errors produced
  * by `safeExec` wrap git stderr one level deep; we allow extra headroom in case
  * a caller adds its own wrapping layer, but refuse to walk an unbounded chain.
@@ -67,7 +122,10 @@ export function getGitStatusPorcelainRaw(cwd: string): string {
 }
 
 export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
-  const args = mode === 'staged' ? ['diff', '--staged'] : ['diff', 'HEAD'];
+  const args =
+    mode === 'staged'
+      ? ['diff', ...GIT_DIFF_PORCELAIN_ARGS, '--staged']
+      : ['diff', ...GIT_DIFF_PORCELAIN_ARGS, 'HEAD'];
   try {
     return safeExec('git', args, {
       cwd,
@@ -87,7 +145,7 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
 
 export function getGitDiffStat(cwd: string): string {
   try {
-    return safeExec('git', ['diff', 'HEAD', '--stat'], {
+    return safeExec('git', ['diff', ...GIT_DIFF_PORCELAIN_ARGS, 'HEAD', '--stat'], {
       cwd,
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
@@ -166,7 +224,7 @@ export function getGitBranchDiffResult(cwd: string, base?: string): GitBranchDif
   const refs = [`origin/${localRef}`, localRef];
   for (const ref of refs) {
     try {
-      const diff = safeExec('git', ['diff', `${ref}...HEAD`], {
+      const diff = safeExec('git', ['diff', ...GIT_DIFF_PORCELAIN_ARGS, `${ref}...HEAD`], {
         cwd,
         timeout: GIT_COMMAND_TIMEOUT_MS,
         maxBuffer: GIT_DIFF_MAX_BUFFER,
@@ -225,7 +283,7 @@ export function getGitDiffRange(cwd: string, range: string): string {
     );
   }
   try {
-    return safeExec('git', ['diff', trimmed], {
+    return safeExec('git', ['diff', ...GIT_DIFF_PORCELAIN_ARGS, trimmed], {
       cwd,
       timeout: GIT_COMMAND_TIMEOUT_MS,
       maxBuffer: GIT_DIFF_MAX_BUFFER,

@@ -119,8 +119,14 @@ export function extractAddedLines(diff: string): DiffAddition[] {
       prevLineContent = lineContent;
     } else if (rawLine.startsWith('-')) {
       // Deleted line — NOT in new file, don't update prevLineContent or lineNum
-    } else if (rawLine.startsWith(' ')) {
-      // Context line — in new file
+    } else if (rawLine.startsWith(' ') || rawLine === '') {
+      // Context line — in new file. Under `diff.suppressBlankEmpty` git prints
+      // an empty context line as an empty string rather than a single space
+      // (no flag restores the space; mmnto-ai/totem#3113); skipping it would
+      // shift every later line number and carry a `totem-ignore-next-line`
+      // across the blank line onto a violation it never named. An empty line
+      // outside a hunk is always followed by a header that resets the count,
+      // so it needs no guard.
       lineNum++;
       prevLineContent = rawLine.slice(1);
     }
