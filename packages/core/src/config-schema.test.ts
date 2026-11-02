@@ -1536,13 +1536,18 @@ describe('searchRelevanceFloor — optional, NO default (mmnto-ai/totem#2727)', 
 // the pair anywhere, so the class cannot return through a new block.
 
 describe('TotemConfigSchema — no optional-wrapped block default (zod 4)', () => {
+  // `def` is zod 4's public definition accessor on every schema (`schema.def.type`,
+  // `.def.innerType`, `.def.shape`); the `_zod` internals are not read.
   interface ZodNode {
-    _zod: { def: { type: string } & Record<string, unknown> };
+    def: { type: string } & Record<string, unknown>;
   }
   const isNode = (value: unknown): value is ZodNode =>
-    typeof value === 'object' && value !== null && '_zod' in value;
+    typeof value === 'object' &&
+    value !== null &&
+    'def' in value &&
+    typeof (value as { def: unknown }).def === 'object';
   const isBlockDefault = (value: unknown): boolean =>
-    isNode(value) && (value._zod.def.type === 'default' || value._zod.def.type === 'prefault');
+    isNode(value) && (value.def.type === 'default' || value.def.type === 'prefault');
 
   /** Every `<path>: <wrapper> over <default|prefault>` pair reachable from `root`. */
   function optionalOverDefaultPairs(root: unknown, rootName: string): string[] {
@@ -1551,12 +1556,12 @@ describe('TotemConfigSchema — no optional-wrapped block default (zod 4)', () =
     const walk = (node: unknown, at: string): void => {
       if (!isNode(node) || seen.has(node)) return;
       seen.add(node);
-      const def = node._zod.def;
+      const def = node.def;
       if (
         (def.type === 'optional' || def.type === 'nullable') &&
         isBlockDefault(def['innerType'])
       ) {
-        hits.push(`${at}: ${def.type} over ${(def['innerType'] as ZodNode)._zod.def.type}`);
+        hits.push(`${at}: ${def.type} over ${(def['innerType'] as ZodNode).def.type}`);
       }
       for (const key of [
         'innerType',
