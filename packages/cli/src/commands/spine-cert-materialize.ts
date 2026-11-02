@@ -17,8 +17,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { ResolvedPrInput } from '@mmnto/totem';
-import { GIT_DIFF_PORCELAIN_ARGS } from '@mmnto/totem';
 
+import { GIT_DIFF_PORCELAIN_ARGS } from '../git.js';
 import { computeFixtureSha, enumeratePrMetas } from './spine-windtunnel.js';
 
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;

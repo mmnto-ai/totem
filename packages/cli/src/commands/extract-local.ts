@@ -1,11 +1,7 @@
 import type { ExtractedLesson, SearchResult } from '@mmnto/totem';
-import {
-  createEmbedder,
-  GIT_DIFF_PORCELAIN_ARGS,
-  LanceStore,
-  TotemConfigError,
-} from '@mmnto/totem';
+import { createEmbedder, LanceStore, TotemConfigError } from '@mmnto/totem';
 
+import { GIT_DIFF_PORCELAIN_ARGS } from '../git.js';
 import { log } from '../ui.js';
 import {
   formatResults,

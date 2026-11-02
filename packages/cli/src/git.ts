@@ -12,6 +12,9 @@ export {
   getGitStatus,
   getLatestTag,
   getTagDate,
+  // The porcelain pins (mmnto-ai/totem#3113): command modules read them from
+  // here, not from the core barrel, which stays out of their static imports.
+  GIT_DIFF_PORCELAIN_ARGS,
   isFileDirty,
   resolveGitRoot,
 } from '@mmnto/totem';

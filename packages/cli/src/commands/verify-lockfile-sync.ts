@@ -1,4 +1,4 @@
-import { GIT_DIFF_PORCELAIN_ARGS } from '@mmnto/totem';
+import { GIT_DIFF_PORCELAIN_ARGS } from '../git.js';
 
 // ─── Constants ──────────────────────────────────────────
 
