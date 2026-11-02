@@ -30,8 +30,11 @@ const GIT_DIFF_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — large diffs (e.g., com
  * repository's headers; and `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`
  * and `diff.mnemonicPrefix` change the `a/` and `b/` labels the header parsers
  * read as the repository path, so a blob read fails on a path that does not
- * exist. On a default config the list changes nothing: every value is git's
- * own default. One same-class key has no flag, `diff.suppressBlankEmpty`,
+ * exist. On a default config the list changes nothing (measured byte-identical
+ * against the unpinned output): seven of the values are git's own defaults,
+ * and `--no-textconv` turns off a conversion git applies by default only once a
+ * `diff=<driver>` attribute and a converter are configured, keeping the diff
+ * on the bytes the blob readers see. One same-class key has no flag, `diff.suppressBlankEmpty`,
  * which prints an empty context line as an empty string; the diff parser
  * counts that line as context (packages/core/src/diff-parser.ts) rather than
  * reaching for a `-c` override, which could not live in this list.
