@@ -127,7 +127,9 @@ describe('RunArtifactSchema', () => {
     const result = RunArtifactSchema.safeParse(v2);
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues.map((i) => i.message).join('\n')).toContain('2.0.0');
+      expect(result.error.issues.map((i) => i.message).join('\n')).toContain(
+        'unsupported run-artifact schemaVersion "2.0.0"',
+      );
     }
   });
 

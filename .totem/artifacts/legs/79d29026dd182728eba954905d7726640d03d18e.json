@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "79d29026dd182728eba954905d7726640d03d18e",
+  "readAt": "2026-11-02T19:19:41Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "BLOCKING",
+      "file": ".totem/specs/3141.md",
+      "line": 123,
+      "claim": "Spec scope says the advisory defect is cured by the bump so array bounds are out of scope, and the changeset presents the bump as the remedy for unbounded-array issue accumulation; zod 4.6.6+ caps only size-constrained collections (capSize, v4/core/schemas.js:820-840), so unbounded arrays still accumulate one issue per failing element",
+      "counterexample": "200000 failing elements: z.array(z.string()) gives 200000 issues on 4.6.5 and on 4.6.7; .max(10) gives 200001 vs 1; z.record gives 200000 on both; 173 of 177 totem z.array sites carry no .max on the line"
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/tools/add-lesson.ts",
+      "line": 0,
+      "claim": "The published MCP inputSchema of all four tools (add_lesson, describe_project, search_knowledge, verify_execution) loses additionalProperties false under zod 4; undisclosed; the wire error issues also lose received and gain origin",
+      "counterexample": "listTools via in-memory client: v3 inputSchema.additionalProperties=false, v4 undefined, for tools 0-3; runtime strip and rejection unchanged"
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": ".changeset/zod-four-array-advisory.md",
+      "line": 7,
+      "claim": "Every parsed result is unchanged is falsified: v4 .datetime() rejects minute-precision instants and offset:true rejects colon-less offsets that v3 accepted, reachable via totem legs deposit --read-at into LegDepositSchema.readAt; the exported DoctorConfigSchema.parse(undefined) also changed",
+      "counterexample": "LegDepositSchema with readAt 2026-11-02T19:00Z: v3 success, v4 Invalid ISO datetime; datetime offset:true on 2026-01-01T00:00:00+0530: v3 true, v4 false"
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 118,
+      "claim": "TotemConfigSchema narrows on numbers: z.number() rejects Infinity (cacheTtls) and .int() rejects values above MAX_SAFE_INTEGER (numCtx), both accepted by v3",
+      "counterexample": "cacheTtls {a: Infinity}: v3 OK, v4 invalid_type; numCtx 2**60: v3 OK, v4 too_big"
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/artifacts/schema.ts",
+      "line": 175,
+      "claim": "The design lists the run-artifact schemaVersion message and the uuid-to-guid acceptance as invariants locked by tests, but no test pins the run-artifact refine text and no test pins off-RFC acceptance at the two selection-manifest guid sites",
+      "counterexample": "grep finds no test text for unsupported run-artifact schemaVersion; selection-manifest.test.ts has no off-RFC session_id or pointer_session_id case"
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".totem/specs/3141.md",
+      "line": 119,
+      "claim": "Two claims are imprecise: zod 4.6.7 keeps a runtime v3-compat single-argument z.record (only the TS signature dropped it), and openai is also imported in cli openai-orchestrator.ts, not only in the core embedder; conclusions hold",
+      "counterexample": "zod/v4/classic/schemas.js:1024 v3-compat branch; z4.record(z4.string()).safeParse({a:'x'}) succeeds; packages/cli/src/orchestrators/openai-orchestrator.ts:26 await import openai"
+    },
+    {
+      "id": "F7",
+      "severity": "QUESTION",
+      "file": "packages/core/src/artifacts/legs.ts",
+      "line": 532,
+      "claim": "The design says the two issue-path joiners stringify segments, but issue.path.join remains at core legs.ts:532, cli utils.ts:170 and cli legs.ts:481; v4 emits a symbol path for a symbol-keyed record input; convert for consistency or note as unreachable from JSON and YAML?",
+      "counterexample": "z4.record(z4.string(), z4.unknown()) on an object with a symbol key yields an invalid_key issue whose path is that symbol"
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7"
+  ],
+  "verdict": "blocking=1 material=2 minor=3 question=1; convergence named on the migration's mechanism (record keys, prefault, the DoctorConfigSchema default drop, partialRecord, guid, error maps, type edits): no regression in 18437 on-disk records, 38 config cases or 198 schemas over base inputs; the open findings are claim breadth, the published MCP schema, and format narrowing outside the five mechanical classes"
+}

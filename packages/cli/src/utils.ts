@@ -166,8 +166,8 @@ export async function loadConfig(configPath: string): Promise<TotemConfig> {
   } catch (err) {
     // Format Zod errors into clean, human-readable messages
     if (err instanceof Error && err.name === 'ZodError' && 'issues' in err) {
-      const issues = (err as { issues: Array<{ path: string[]; message: string }> }).issues
-        .map((i) => `  ${i.path.join('.')}: ${i.message}`)
+      const issues = (err as { issues: Array<{ path: PropertyKey[]; message: string }> }).issues
+        .map((i) => `  ${i.path.map(String).join('.')}: ${i.message}`)
         .join('\n');
       throw new TotemConfigError(
         `Invalid configuration in ${path.basename(configPath)}:\n${issues}`,

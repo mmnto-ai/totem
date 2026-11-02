@@ -529,7 +529,7 @@ function oneLineZodReason(zodError: z.ZodError): string {
   return toSingleLine(
     zodError.issues
       .map((issue) => {
-        const at = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+        const at = issue.path.length > 0 ? issue.path.map(String).join('.') : '<root>';
         return `${at}: ${issue.message}`;
       })
       .join('; '),
