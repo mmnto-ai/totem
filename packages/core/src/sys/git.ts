@@ -35,7 +35,13 @@ const GIT_DIFF_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — large diffs (e.g., com
  * git's own defaults, and `--no-ext-diff` and `--no-textconv` turn off
  * behaviours git allows by default that are in force only once an external
  * command or a converter is configured. `--no-relative` arrived in git 2.28,
- * the floor this list sets; an older git refuses every pinned read loudly.
+ * the floor this list sets. Below it git refuses the argv as an unknown
+ * option: the gate's patch readers (`getGitDiff`, `getGitBranchDiffResult`,
+ * `getGitDiffRange`) throw that error, while `getGitDiffStat`, the cli's
+ * `getDiffBetween`, the lockfile-sync gate's two reads and the local extractor
+ * catch their git errors by design and go quiet (an empty stat, an empty diff,
+ * a passed pin check, "no local changes"), as they already did on any other
+ * git failure.
  *
  * Two same-class keys are not pinned. `diff.suppressBlankEmpty` has no flag:
  * it prints an empty context line as an empty string, and the diff parser

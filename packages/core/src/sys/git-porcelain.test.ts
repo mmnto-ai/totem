@@ -20,6 +20,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { extractAddedLines } from '../diff-parser.js';
@@ -171,42 +172,49 @@ describe('porcelain pins under a rewriting git config (mmnto-ai/totem#3113)', ()
 // ─── Census: every patch- or stat-producing git spawn carries the list ──────
 //
 // The list-form diffs (`--name-only`, `--name-status`, `--numstat`,
-// `--shortstat`) were measured untouched by every setting above and are
-// exempt by that flag, unless the same argv also asks for a patch or a stat
-// (`--stat` beside `--numstat` is coloured). `-z` on its own is not a list
-// form (it only changes the terminators of those four outputs, and alone it
-// still prints a patch), so an argv carrying `-z` without one of the four is
-// held to the rule. Every other `git diff` argv, and every `git log` argv that
-// prints a patch or a stat (`-p`, `-u`, `-U<n>`, `--unified`, `--patch`,
-// `--stat`, `--stat=<n>`, `--patch-with-stat`, `--cc`, `--word-diff`), must
-// spread GIT_DIFF_PORCELAIN_ARGS as the element directly after the subcommand,
-// before any ref, option or `--`. The scanner reads array literals with
-// balanced brackets and either quote style, skips comments, closes a `'` or
-// `"` string at the end of its line (so a regex literal carrying a quote can
-// desynchronise it only to the end of that line), splits at top-level commas,
-// and finds the subcommand wherever it sits (after a `'-C', dir` pair too), so
-// a spawn written in any of the repository's idioms is read. It does not read
+// `--shortstat`) were measured untouched by every setting above. `--name-only`
+// and `--name-status` exempt an argv whatever else rides with it: git prints
+// names only, even beside `-p` or `-U3` (measured on git 2.56). `--numstat`
+// and `--shortstat` exempt an argv only when no patch or stat spelling rides
+// with them, since `--stat` or `-U3` beside them adds a coloured stat or a
+// patch. `-z` on its own is not a list form (it only changes the terminators
+// of those four outputs, and alone it still prints a patch), so an argv
+// carrying `-z` without one of the four is held to the rule. Every other
+// `git diff` argv, and every `git log` argv that prints a patch or a stat
+// (`-p`, `-u`, `-U<n>`, `--unified`, `--patch`, `--patch-with-stat`,
+// `--patch-with-raw`, `--cc`, `--compact-summary`, `--binary`, `-L<range>`,
+// `--stat` and its `--stat=<n>` / `--stat-width` / `--stat-count` forms),
+// must spread GIT_DIFF_PORCELAIN_ARGS as the element directly after the
+// subcommand, before any ref, option or `--`. The scanner walks TypeScript's own syntax
+// tree for each source (core already depends on `typescript`), so quotes,
+// comments, regex literals and template literals are read exactly as the
+// compiler reads them, every array literal is found whole, and the subcommand
+// is found wherever it sits (after a `'-C', dir` pair too). It does not read
 // an argv whose subcommand is a variable, nor `show`, `diff-tree` or
 // `stash show`, none of which the tree spawns for a patch today.
 
-const LIST_FORM_FLAGS = ['--name-only', '--name-status', '--numstat', '--shortstat'];
+/** Git prints names only under these, whatever else the argv carries. */
+const NAME_LIST_FLAGS = ['--name-only', '--name-status'];
+/** List forms unless a patch or stat spelling rides with them. */
+const COUNT_LIST_FLAGS = ['--numstat', '--shortstat'];
 const PATCH_OR_STAT_FLAGS = [
   '-p',
   '-u',
   '--patch',
-  '--stat',
   '--patch-with-stat',
+  '--patch-with-raw',
   '--cc',
-  '--word-diff',
+  '--compact-summary',
+  '--binary',
 ];
 const PINS_TOKEN = '...GIT_DIFF_PORCELAIN_ARGS';
 
-/** A token that makes git print a patch or a stat, whatever else the argv carries. */
+/** A token that makes git print a patch or a stat (`--stat` covers its `=<n>`, `-width`, `-count` forms). */
 const printsPatchOrStat = (token: string): boolean =>
   PATCH_OR_STAT_FLAGS.includes(token) ||
-  token.startsWith('--stat=') ||
+  token.startsWith('--stat') ||
   token.startsWith('--unified') ||
-  token.startsWith('--word-diff=') ||
+  token.startsWith('-L') ||
   /^-U\d*$/.test(token);
 
 function listTsSources(dir: string, out: string[]): void {
@@ -221,73 +229,42 @@ function listTsSources(dir: string, out: string[]): void {
   }
 }
 
-/** Every array literal in `text`, as its start offset and its top-level tokens (trimmed). */
-function arrayLiterals(text: string): Array<{ start: number; tokens: string[] }> {
-  const out: Array<{ start: number; tokens: string[] }> = [];
-  const quotes = new Set(["'", '"', '`']);
-  // Open array literals, innermost last; each tracks its own depth of nested
-  // brackets and parentheses so a top-level comma is told from a nested one.
-  const open: Array<{ start: number; depth: number; tokenStart: number; tokens: string[] }> = [];
-  let quote: string | null = null;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]!;
-    if (quote !== null) {
-      if (ch === '\\') i++;
-      else if (ch === quote) quote = null;
-      // A `'` or `"` string cannot span a line, so a quote still open at the
-      // line end was never a string (a regex literal's quote): close it there.
-      else if (ch === '\n' && quote !== '`') quote = null;
-      continue;
-    }
-    // A comment's apostrophes ("git's", "don't") would otherwise open a quote
-    // that swallows the next array literal: skip `//` to the line end and
-    // `/* … */` whole.
-    if (ch === '/' && text[i + 1] === '/') {
-      const eol = text.indexOf('\n', i);
-      i = eol < 0 ? text.length : eol;
-      continue;
-    }
-    if (ch === '/' && text[i + 1] === '*') {
-      const end = text.indexOf('*/', i + 2);
-      i = end < 0 ? text.length : end + 1;
-      continue;
-    }
-    if (quotes.has(ch)) {
-      quote = ch;
-      continue;
-    }
-    const top = open.at(-1);
-    if (ch === '[') {
-      if (top !== undefined) top.depth++;
-      open.push({ start: i, depth: 0, tokenStart: i + 1, tokens: [] });
-      continue;
-    }
-    if (top === undefined) continue;
-    if (ch === '(' || ch === '{') top.depth++;
-    else if (ch === ')' || ch === '}') top.depth--;
-    else if (ch === ',' && top.depth === 0) {
-      top.tokens.push(text.slice(top.tokenStart, i).trim());
-      top.tokenStart = i + 1;
-    } else if (ch === ']') {
-      if (top.depth > 0) {
-        top.depth--;
-        continue;
-      }
-      const last = text.slice(top.tokenStart, i).trim();
-      if (last.length > 0) top.tokens.push(last);
-      open.pop();
-      out.push({ start: top.start, tokens: top.tokens });
-      const parent = open.at(-1);
-      if (parent !== undefined) parent.depth--;
-    }
-  }
-  return out;
+interface ArrayLiteral {
+  /** 1-based line of the literal's opening bracket. */
+  line: number;
+  /** Each element as written in the source (`'diff'`, `...GIT_DIFF_PORCELAIN_ARGS`, `refs[0]`). */
+  tokens: string[];
+  /** Each element's string value when it is a plain string literal, else null. */
+  literals: Array<string | null>;
 }
 
-const unquote = (token: string): string | null => {
-  const m = token.match(/^(['"])(.*)\1$/);
-  return m ? m[2]! : null;
-};
+/** Every array literal in a TypeScript source, read from the compiler's own syntax tree. */
+function arrayLiterals(text: string, fileName: string): ArrayLiteral[] {
+  const source = ts.createSourceFile(
+    fileName,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const out: ArrayLiteral[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isArrayLiteralExpression(node)) {
+      out.push({
+        line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+        tokens: node.elements.map((element) => element.getText(source)),
+        literals: node.elements.map((element) =>
+          ts.isStringLiteral(element) || ts.isNoSubstitutionTemplateLiteral(element)
+            ? element.text
+            : null,
+        ),
+      });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return out;
+}
 
 /**
  * `file:line argv` for every git diff / patch-printing git log argv that lacks
@@ -303,8 +280,9 @@ function unpinnedGitDiffSpawns(repoRoot: string): { violations: string[]; seen: 
   let seen = 0;
   for (const file of sources) {
     const text = fs.readFileSync(file, 'utf-8');
-    for (const { start, tokens } of arrayLiterals(text)) {
-      const literals = tokens.map(unquote);
+    // A source with no quoted `diff` or `log` holds no git argv; skip the parse.
+    if (!/['"`](diff|log)['"`]/.test(text)) continue;
+    for (const { line, tokens, literals } of arrayLiterals(text, file)) {
       const at = literals.findIndex((t) => t === 'diff' || t === 'log');
       if (at < 0) continue;
       // The word is git's subcommand only when everything before it is a git
@@ -323,12 +301,12 @@ function unpinnedGitDiffSpawns(repoRoot: string): { violations: string[]; seen: 
       seen++;
       const subcommand = literals[at]!;
       const rest = literals.slice(at + 1);
+      if (rest.some((t) => t !== null && NAME_LIST_FLAGS.includes(t))) continue;
       const producesPatchOrStat = rest.some((t) => t !== null && printsPatchOrStat(t));
       if (subcommand === 'log' && !producesPatchOrStat) continue;
-      const listForm = rest.some((t) => t !== null && LIST_FORM_FLAGS.includes(t));
-      if (subcommand === 'diff' && listForm && !producesPatchOrStat) continue;
+      const countList = rest.some((t) => t !== null && COUNT_LIST_FLAGS.includes(t));
+      if (subcommand === 'diff' && countList && !producesPatchOrStat) continue;
       if (tokens[at + 1] === PINS_TOKEN) continue;
-      const line = text.slice(0, start).split('\n').length;
       const rel = path.relative(repoRoot, file).split(path.sep).join('/');
       violations.push(`${rel}:${line} [${tokens.join(', ')}]`);
     }
@@ -373,14 +351,21 @@ describe('census: patch-producing git spawns spread GIT_DIFF_PORCELAIN_ARGS (mmn
           "// a comment with git's apostrophe, which must not swallow the next line",
           "safeExec('git', ['diff', '--cached']);", // 14 unpinned, after the comment
           "safeExec('gh', ['pr', 'diff', String(num), '--', ...files]);", // not git's diff: unseen
-          "const q = s.replace(/'/g, '');", // a regex literal with a quote: closed at the line end
-          "safeExec('git', ['diff', 'HEAD']);", // 15 unpinned, after the regex line
-          "safeExec('git', ['diff', '--name-only', '-U3', ref]);", // 16 a list flag beside a patch spelling
+          "const q = s.replace(/'/g, '');", // a regex literal with a quote: read as a regex, not a string
+          "safeExec('git', ['diff', 'HEAD~1']);", // 15 unpinned, after the regex line
+          'const r = /`/;', // a regex literal with a backtick: read as a regex, not a template
+          "safeExec('git', ['diff', 'HEAD~2']);", // 16 unpinned, after the backtick regex
+          "safeExec('git', ['diff', '--numstat', '-U3', ref]);", // 17 a count list flag beside a patch spelling: a patch
+          "safeExec('git', ['diff', '--name-only', '-U3', ref]);", // 18 --name-only wins: names only, exempt
+          "exec('git', ['log', '--name-status', '-p', range]);", // 19 --name-status wins on log too, exempt
+          "safeExec('git', ['diff', '--numstat', '--compact-summary', ref]);", // 20 a stat beside a count flag
+          "safeExec('git', ['diff', ...GIT_DIFF_PORCELAIN_ARGS, `a'b`, '--', 'x//y']);", // 21 pinned; a quote in a template, // in a string
+          "exec('git', ['log', '--stat-width=40', range]);", // 22 a --stat prefix spelling on log
         ].join('\n'),
         'utf-8',
       );
       const { violations, seen } = unpinnedGitDiffSpawns(dir);
-      expect(seen).toBe(16);
+      expect(seen).toBe(22);
       expect(violations).toEqual([
         "packages/core/src/x.ts:1 ['diff', 'HEAD']",
         "packages/core/src/x.ts:4 ['log', '-p', range]",
@@ -391,8 +376,11 @@ describe('census: patch-producing git spawns spread GIT_DIFF_PORCELAIN_ARGS (mmn
         "packages/core/src/x.ts:10 ['diff', '--stat', '--numstat', ref]",
         "packages/core/src/x.ts:11 ['diff', '-z', ref]",
         "packages/core/src/x.ts:15 ['diff', '--cached']",
-        "packages/core/src/x.ts:18 ['diff', 'HEAD']",
-        "packages/core/src/x.ts:19 ['diff', '--name-only', '-U3', ref]",
+        "packages/core/src/x.ts:18 ['diff', 'HEAD~1']",
+        "packages/core/src/x.ts:20 ['diff', 'HEAD~2']",
+        "packages/core/src/x.ts:21 ['diff', '--numstat', '-U3', ref]",
+        "packages/core/src/x.ts:24 ['diff', '--numstat', '--compact-summary', ref]",
+        "packages/core/src/x.ts:26 ['log', '--stat-width=40', range]",
       ]);
     } finally {
       cleanTmpDir(dir);
