@@ -13,24 +13,42 @@ const GIT_COMMAND_TIMEOUT_MS = 15_000;
 const GIT_DIFF_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — large diffs (e.g., compiled-rules.json)
 
 /**
- * The porcelain pins every `git diff` Totem reads carries, spread directly
- * after the subcommand and before any ref, option or `--` (mmnto-ai/totem#3113).
- * A user's or repository's git config otherwise rewrites the text the parsers
- * assume: `diff.external` replaces the patch with a tool's output (the gate
- * then finds no additions and passes a pushed violation), `color.ui always`
- * wraps the headers in escape sequences (`Changed files (0)`), and
- * `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix` and `diff.mnemonicPrefix`
- * change the `a/` and `b/` labels the header parsers read as the repository
- * path (a blob read then fails on a path that does not exist). The four flags
- * win over each of those settings, measured on git 2.56, which is what git's
- * own porcelain scripts rely on. The list-form diffs (`--name-only`,
- * `--name-status`, `--numstat`, `-z`) were measured unaffected by every
- * setting and carry the list anyway, so the rule is one sentence and the
- * census test over the sources needs no exemption table.
+ * The porcelain pins every patch- or stat-producing `git diff` (and `git log
+ * -p`) Totem reads carries, spread directly after the subcommand and before
+ * any ref, option or `--` (mmnto-ai/totem#3113). A user's or repository's git
+ * config otherwise rewrites the text the parsers assume, and each flag restores
+ * git's default for one such key, measured on git 2.56: `diff.external` (and
+ * the `GIT_EXTERNAL_DIFF` variable) replaces the patch with a tool's output, so
+ * the gate finds no additions and passes a pushed violation; a `diff=<driver>`
+ * attribute with `diff.<driver>.textconv` shows converted text where the blob
+ * readers see the file's bytes, and a failing converter makes the diff fatal;
+ * `color.ui always` wraps the headers in escape sequences (`Changed files
+ * (0)`); `diff.relative` with a subdirectory as the working directory strips
+ * the path prefix and drops every change outside it; `diff.context` below 3
+ * hides the unchanged line a `totem-ignore-next-line` sits on, a false FAIL;
+ * `diff.submodule=diff` inlines a submodule's own patch under this
+ * repository's headers; and `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`
+ * and `diff.mnemonicPrefix` change the `a/` and `b/` labels the header parsers
+ * read as the repository path, so a blob read fails on a path that does not
+ * exist. On a default config the list changes nothing: every value is git's
+ * own default. One same-class key has no flag, `diff.suppressBlankEmpty`,
+ * which prints an empty context line as an empty string; the diff parser
+ * counts that line as context (packages/core/src/diff-parser.ts) rather than
+ * reaching for a `-c` override, which could not live in this list.
+ *
+ * The list-form diffs (`--name-only`, `--name-status`, `--numstat`,
+ * `--shortstat`) were measured unaffected by every setting above and are left
+ * unpinned; the census test over the sources (git-porcelain.test.ts) exempts
+ * them by their flag and requires the list on every other `git diff` and on
+ * every `git log` that prints a patch or a stat.
  */
 export const GIT_DIFF_PORCELAIN_ARGS = [
   '--no-ext-diff',
+  '--no-textconv',
   '--no-color',
+  '--no-relative',
+  '--unified=3',
+  '--submodule=short',
   '--src-prefix=a/',
   '--dst-prefix=b/',
 ] as const;

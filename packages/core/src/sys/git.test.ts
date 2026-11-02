@@ -70,10 +70,14 @@ import {
 } from './git.js';
 
 describe('GIT_DIFF_PORCELAIN_ARGS (mmnto-ai/totem#3113)', () => {
-  it('is the four porcelain pins in the order git documents them', () => {
+  it('is the eight porcelain pins, each restoring one default a config key can rewrite', () => {
     expect([...GIT_DIFF_PORCELAIN_ARGS]).toEqual([
       '--no-ext-diff',
+      '--no-textconv',
       '--no-color',
+      '--no-relative',
+      '--unified=3',
+      '--submodule=short',
       '--src-prefix=a/',
       '--dst-prefix=b/',
     ]);
