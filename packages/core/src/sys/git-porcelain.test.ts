@@ -121,10 +121,13 @@ describe('porcelain pins under a rewriting git config (mmnto-ai/totem#3113)', ()
 // ─── Census: every patch-producing `git diff` spawn carries the list ────────
 //
 // The list-form diffs (`--name-only`, `--name-status`, `--numstat`,
-// `--shortstat`, `-z`) were measured untouched by every setting above and are
-// exempt by their flag; every other `git diff` argv, and every `git log -p`
-// argv, must spread GIT_DIFF_PORCELAIN_ARGS as the element after the
-// subcommand, before any ref, option or `--`.
+// `--shortstat`) were measured untouched by every setting above and are
+// exempt by that flag; `-z` on its own is not a list form (it only changes
+// the terminators of those four outputs, and alone it still prints a patch),
+// so an argv carrying `-z` without one of the four is held to the rule.
+// Every other `git diff` argv, and every `git log -p` argv, must spread
+// GIT_DIFF_PORCELAIN_ARGS as the element after the subcommand, before any
+// ref, option or `--`.
 
 const LIST_FORM_FLAGS = ['--name-only', '--name-status', '--numstat', '--shortstat'];
 
