@@ -207,7 +207,9 @@ const PATCH_OR_STAT_FLAGS = [
   '--compact-summary',
   '--binary',
 ];
-const PINS_TOKEN = '...GIT_DIFF_PORCELAIN_ARGS';
+// Named `_SPREAD`, not `_TOKEN`: the review lane's secret masking redacts a string
+// assigned to a `*_TOKEN` constant, and a lane then reads `[REDACTED]` here.
+const PINS_SPREAD = '...GIT_DIFF_PORCELAIN_ARGS';
 
 /** A token that makes git print a patch or a stat (`--stat` covers its `=<n>`, `-width`, `-count` forms). */
 const printsPatchOrStat = (token: string): boolean =>
@@ -306,7 +308,7 @@ function unpinnedGitDiffSpawns(repoRoot: string): { violations: string[]; seen: 
       if (subcommand === 'log' && !producesPatchOrStat) continue;
       const countList = rest.some((t) => t !== null && COUNT_LIST_FLAGS.includes(t));
       if (subcommand === 'diff' && countList && !producesPatchOrStat) continue;
-      if (tokens[at + 1] === PINS_TOKEN) continue;
+      if (tokens[at + 1] === PINS_SPREAD) continue;
       const rel = path.relative(repoRoot, file).split(path.sep).join('/');
       violations.push(`${rel}:${line} [${tokens.join(', ')}]`);
     }
