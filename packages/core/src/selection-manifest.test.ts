@@ -191,6 +191,9 @@ describe('schema strictness', () => {
     const row = buildSelectionManifestRow(baseInput({ context: { query: 'q' } }));
     expect(Object.keys(row.context)).toEqual(['query']);
     expect(SelectionManifestRowSchema.safeParse(row).success).toBe(true);
+    // The empty subset is a subset too.
+    const empty = buildSelectionManifestRow(baseInput({ context: {} }));
+    expect(SelectionManifestRowSchema.safeParse(empty).success).toBe(true);
   });
 
   it('rejects partial measurement states — the trio travels together (PR #2625 CR round)', () => {
