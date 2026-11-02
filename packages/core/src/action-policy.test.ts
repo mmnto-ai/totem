@@ -943,8 +943,9 @@ describe('strict, bounded schema', () => {
   }
 
   it('rejects the row typo "enviroment" with its path', () => {
+    // The tail is zod's own unrecognized-key text (its wording changed in zod 4).
     expect(loadError(row({ enviroment: 'prod' }))).toBe(
-      "[Totem Error] Invalid action-policy.json: rows.0: Unrecognized key(s) in object: 'enviroment'",
+      '[Totem Error] Invalid action-policy.json: rows.0: Unrecognized key: "enviroment"',
     );
   });
 
@@ -961,7 +962,7 @@ describe('strict, bounded schema', () => {
       ],
     };
     expect(loadError(bad)).toBe(
-      "[Totem Error] Invalid action-policy.json: rows.0.scope: Unrecognized key(s) in object: 'command'",
+      '[Totem Error] Invalid action-policy.json: rows.0.scope: Unrecognized key: "command"',
     );
   });
 

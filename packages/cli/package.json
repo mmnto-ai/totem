@@ -37,7 +37,7 @@
     "picocolors": "^1.1.1",
     "smol-toml": "^1.6.1",
     "yaml": "^2.4.0",
-    "zod": "^3.24.0"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

@@ -36,7 +36,7 @@ describe('handleGhError', () => {
       {
         code: 'invalid_type',
         expected: 'string',
-        received: 'number',
+        input: 42,
         path: ['title'],
         message: 'Expected string',
       },

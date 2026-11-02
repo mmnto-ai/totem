@@ -198,7 +198,9 @@ export type SelectionContextKey = (typeof SELECTION_CONTEXT_KEYS)[number];
  * design — a nested structure is where a shared relevance model would grow,
  * and the schema refuses it room; closed-keyed so it cannot grow one either.
  */
-const SelectionContextSchema = z.record(
+const SelectionContextSchema = z.partialRecord(
+  // `partialRecord`: zod 4's `record` over an enum key is exhaustive (every key
+  // required); the v3 record accepted any subset, which emitters rely on.
   z.enum(SELECTION_CONTEXT_KEYS),
   z.union([z.string(), z.number(), z.boolean(), z.null()]),
 );
@@ -211,7 +213,7 @@ export const SelectionManifestRowSchema = z
     timestamp: z.string().datetime(),
     emitter: z.enum(SELECTION_EMITTERS),
     /** Session UUID from `.totem/ledger/.session-id` — the denominator join key. */
-    session_id: z.string().uuid().optional(),
+    session_id: z.string().guid().optional(),
     /** Seat id from TOTEM_SELF_AGENT (ADR-078). Absent = stamped absence, never guessed. */
     agent_source: z.string().trim().min(1).optional(),
     /**
@@ -233,7 +235,7 @@ export const SelectionManifestRowSchema = z
       .object({
         env_seat: z.string().trim().min(1),
         minting_seat: z.string().trim().min(1),
-        pointer_session_id: z.string().uuid(),
+        pointer_session_id: z.string().guid(),
       })
       .strict()
       .optional(),

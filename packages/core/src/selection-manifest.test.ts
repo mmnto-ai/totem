@@ -187,6 +187,12 @@ describe('schema strictness', () => {
     expect(SelectionManifestRowSchema.safeParse(weighted).success).toBe(false);
   });
 
+  it('accepts a context naming only some of the closed keys (the key set is closed, not exhaustive; mmnto-ai/totem#3141)', () => {
+    const row = buildSelectionManifestRow(baseInput({ context: { query: 'q' } }));
+    expect(Object.keys(row.context)).toEqual(['query']);
+    expect(SelectionManifestRowSchema.safeParse(row).success).toBe(true);
+  });
+
   it('rejects partial measurement states — the trio travels together (PR #2625 CR round)', () => {
     // bytes without fingerprint
     expect(

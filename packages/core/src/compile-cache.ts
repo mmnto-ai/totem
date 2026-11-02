@@ -92,9 +92,9 @@ const CompileLessonResultMinimalSchema = z.discriminatedUnion('status', [
       // `rule` MUST be a non-null object (the CompiledRule payload). z.unknown()
       // would accept missing fields too, which defeats the contract — a payload
       // like `{ status: 'compiled' }` would survive validation and crash the
-      // cache-hit path on `result.rule` dereference. `z.record(z.unknown())`
+      // cache-hit path on `result.rule` dereference. `z.record(z.string(), z.unknown())`
       // requires an object without coupling to CompiledRule's exact shape.
-      rule: z.record(z.unknown()),
+      rule: z.record(z.string(), z.unknown()),
     })
     .passthrough(),
   z

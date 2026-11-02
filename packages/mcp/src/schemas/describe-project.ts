@@ -150,7 +150,7 @@ export const RichProjectStateSchema = z.object({
   strategyPointer: StrategyPointerSchema,
   gitState: GitStateSchema,
   /** Fixed-group package versions (e.g. `@mmnto/cli`). Entries omit when extraction fails for that package. */
-  packageVersions: z.record(z.string()),
+  packageVersions: z.record(z.string(), z.string()),
   ruleCounts: RuleCountsSchema,
   /** Count of `.totem/lessons/*.md` files. Zero if the directory is missing. */
   lessonCount: z.number().int().nonnegative(),
@@ -187,7 +187,7 @@ export const LegacyProjectDescriptionSchema = z.object({
   rulesSource: z.enum(['compiled-rules', 'absent', 'unreadable']),
   lessons: z.number(),
   targets: z.array(z.string()),
-  partitions: z.record(z.array(z.string())),
+  partitions: z.record(z.string(), z.array(z.string())),
   hooks: z.array(z.string()),
 });
 

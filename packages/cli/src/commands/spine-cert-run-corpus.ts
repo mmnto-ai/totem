@@ -69,7 +69,7 @@ const ResolvedPrDiffSchema = z.object({
 });
 
 // firingLabelId → TP|FP
-const GroundTruthSchema = z.record(z.enum(['TP', 'FP']));
+const GroundTruthSchema = z.record(z.string(), z.enum(['TP', 'FP']));
 
 /** A zero-network ReviewThreadSource backed by committed, frozen review content. */
 function frozenSourceFrom(contents: ReviewThreadContent[]): ReviewThreadSource {

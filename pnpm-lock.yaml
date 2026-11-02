@@ -10,13 +10,13 @@ importers:
     devDependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.98.0
-        version: 0.98.0(zod@3.25.76)
+        version: 0.98.0(zod@4.6.7)
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@22.19.13)
       '@google/genai':
         specifier: ^2.6.0
-        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
+        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@4.6.7))
       eslint:
         specifier: ^10.4.0
         version: 10.4.0(jiti@2.6.1)
@@ -82,15 +82,15 @@ importers:
         specifier: ^2.4.0
         version: 2.8.2
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.98.0
-        version: 0.98.0(zod@3.25.76)
+        version: 0.98.0(zod@4.6.7)
       '@google/genai':
         specifier: ^2.6.0
-        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
+        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@4.6.7))
       '@types/cross-spawn':
         specifier: ^6.0.6
         version: 6.0.6
@@ -102,7 +102,7 @@ importers:
         version: 0.28.0
       openai:
         specifier: ^4.77.0
-        version: 4.104.0(ws@8.19.0)(zod@3.25.76)
+        version: 4.104.0(ws@8.19.0)(zod@4.6.7)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -117,7 +117,7 @@ importers:
         version: 0.42.0
       '@google/genai':
         specifier: '>=2.0.0'
-        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
+        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@4.6.7))
       '@lancedb/lancedb':
         specifier: ^0.26.2
         version: 0.26.2(apache-arrow@17.0.0)
@@ -132,7 +132,7 @@ importers:
         version: 11.1.0
       openai:
         specifier: ^4.77.0
-        version: 4.104.0(ws@8.19.0)(zod@3.25.76)
+        version: 4.104.0(ws@8.19.0)(zod@4.6.7)
       remark-frontmatter:
         specifier: ^5.0.0
         version: 5.0.0
@@ -164,8 +164,8 @@ importers:
         specifier: ^2.4.0
         version: 2.8.2
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@ast-grep/wasm':
         specifier: ^0.42.1
@@ -190,7 +190,7 @@ importers:
         version: link:../core
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
-        version: 1.27.1(zod@3.25.76)
+        version: 1.27.1(zod@4.6.7)
       dotenv:
         specifier: ^16.4.0
         version: 16.6.1
@@ -198,8 +198,8 @@ importers:
         specifier: ^2.4.0
         version: 2.6.1
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -3181,20 +3181,20 @@ packages:
     peerDependencies:
       zod: ^3.25 || ^4
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
 
-  '@anthropic-ai/sdk@0.98.0(zod@3.25.76)':
+  '@anthropic-ai/sdk@0.98.0(zod@4.6.7)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.0.0
     optionalDependencies:
-      zod: 3.25.76
+      zod: 4.6.7
 
   '@ast-grep/lang-rust@0.0.7':
     dependencies:
@@ -3591,14 +3591,14 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@google/genai@2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))':
+  '@google/genai@2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.6.1
       p-retry: 4.6.2
       protobufjs: 7.5.4
       ws: 8.19.0
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.27.1(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.27.1(zod@4.6.7)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -3697,7 +3697,7 @@ snapshots:
   '@mmnto/strategy-doctrine@0.1.52':
     optional: true
 
-  '@modelcontextprotocol/sdk@1.27.1(zod@3.25.76)':
+  '@modelcontextprotocol/sdk@1.27.1(zod@4.6.7)':
     dependencies:
       '@hono/node-server': 1.19.9(hono@4.12.3)
       ajv: 8.18.0
@@ -3714,8 +3714,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
+      zod: 4.6.7
+      zod-to-json-schema: 3.25.1(zod@4.6.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -5419,7 +5419,7 @@ snapshots:
     dependencies:
       json-alexander: 0.1.13
 
-  openai@4.104.0(ws@8.19.0)(zod@3.25.76):
+  openai@4.104.0(ws@8.19.0)(zod@4.6.7):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
@@ -5430,7 +5430,7 @@ snapshots:
       node-fetch: 2.7.0
     optionalDependencies:
       ws: 8.19.0
-      zod: 3.25.76
+      zod: 4.6.7
     transitivePeerDependencies:
       - encoding
 
@@ -6168,10 +6168,10 @@ snapshots:
 
   yoctocolors@2.1.2: {}
 
-  zod-to-json-schema@3.25.1(zod@3.25.76):
+  zod-to-json-schema@3.25.1(zod@4.6.7):
     dependencies:
-      zod: 3.25.76
+      zod: 4.6.7
 
-  zod@3.25.76: {}
+  zod@4.6.7: {}
 
   zwitch@2.0.4: {}

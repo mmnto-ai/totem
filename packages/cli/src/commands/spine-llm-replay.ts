@@ -389,9 +389,9 @@ export const ReplayRecordsSchema = z.object({
    * normalizes a legacy row to a `DraftResult` on read (empty → `legacy-unknown`);
    * fresh recordings always write the object form.
    */
-  extractor: z.record(z.union([z.array(z.string()), DraftResultLocalSchema])),
+  extractor: z.record(z.string(), z.union([z.array(z.string()), DraftResultLocalSchema])),
   /** `inputKey → DraftClassifier.classify()` return (a `ClassifierResult`). */
-  classifier: z.record(ClassifierResultLocalSchema),
+  classifier: z.record(z.string(), ClassifierResultLocalSchema),
 });
 export type ReplayRecords = z.infer<typeof ReplayRecordsSchema>;
 

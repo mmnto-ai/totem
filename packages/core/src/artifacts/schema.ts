@@ -172,12 +172,10 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
 const SCHEMA_VERSION_RE = /^1\.\d+\.\d+$/;
 
 /** Accept any 1.x version; reject other majors with the version named (F1). */
-const schemaVersionField = z.string().refine(
-  (v) => SCHEMA_VERSION_RE.test(v),
-  (v) => ({
-    message: `unsupported run-artifact schemaVersion "${v}" — this reader understands major ${RUN_ARTIFACT_KNOWN_MAJOR}.x; a new major requires a migration entry in loadRunArtifact`,
-  }),
-);
+const schemaVersionField = z.string().refine((v) => SCHEMA_VERSION_RE.test(v), {
+  error: (issue) =>
+    `unsupported run-artifact schemaVersion "${String(issue.input)}" — this reader understands major ${RUN_ARTIFACT_KNOWN_MAJOR}.x; a new major requires a migration entry in loadRunArtifact`,
+});
 
 /**
  * The assembled prompt inputs, POST-DLP. `maskedPrompt`/`maskedSystemPrompt`
@@ -575,7 +573,7 @@ export const OutputContractSchema = z.object({
   /** Whether an explicit `VERIFY:` escalation is an acceptable fallback for an uncitable claim. */
   verifyFallback: z.boolean().optional(),
   /** JSON-Schema definition for structured output. */
-  schema: z.record(z.unknown()).optional(),
+  schema: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
