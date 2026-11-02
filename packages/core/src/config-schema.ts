@@ -113,9 +113,9 @@ const BaseOrchestratorFields = {
   /** Fallback model used automatically if the primary model fails due to quota/rate limits */
   fallbackModel: z.string().optional(),
   /** Per-command model overrides (e.g., { 'spec': 'gemini-3.1-pro-preview' }) */
-  overrides: z.record(z.string()).optional(),
+  overrides: z.record(z.string(), z.string()).optional(),
   /** Per-command cache TTLs in seconds (e.g., { 'triage': 3600, 'shield': 0 }) */
-  cacheTtls: z.record(z.number()).optional(),
+  cacheTtls: z.record(z.string(), z.number()).optional(),
   /**
    * Enable provider-native prompt caching (mmnto/totem#1291 Proposal 217). When true and
    * the provider supports it (Anthropic in 1.15.0, Gemini in 1.16.0+), persistent
@@ -232,20 +232,22 @@ export const GarbageCollectionSchema = z.object({
  * advisory window in `totem doctor`. A single integer threshold on
  * `RuleMetric.evaluationCount`.
  */
-export const DoctorConfigSchema = z
-  .object({
-    /**
-     * Minimum cumulative `RuleMetric.evaluationCount` before `totem doctor` will
-     * flag a rule as stale (zero `contextCounts.code` over the rule's lifetime).
-     *
-     * v1 uses cumulative-lifetime semantics: a rule fires once ever, then goes
-     * silent, and stays exempt. mmnto-ai/totem#1550 tracks swapping to true
-     * rolling-window semantics via `RuleMetric.runHistory` ring buffer. The
-     * config key stays; only the underlying math upgrades. No user migration.
-     */
-    staleRuleWindow: z.number().int().min(1).default(10),
-  })
-  .default({});
+export const DoctorConfigSchema = z.object({
+  /**
+   * Minimum cumulative `RuleMetric.evaluationCount` before `totem doctor` will
+   * flag a rule as stale (zero `contextCounts.code` over the rule's lifetime).
+   *
+   * v1 uses cumulative-lifetime semantics: a rule fires once ever, then goes
+   * silent, and stays exempt. mmnto-ai/totem#1550 tracks swapping to true
+   * rolling-window semantics via `RuleMetric.runHistory` ring buffer. The
+   * config key stays; only the underlying math upgrades. No user migration.
+   */
+  staleRuleWindow: z.number().int().min(1).default(10),
+});
+// No block-level default here: `TotemConfigSchema` attaches this schema as
+// `.optional()`, and zod 4's optional applies an inner default where zod 3
+// returned `undefined`, so a default would fill `doctor` for a config that
+// never declared it. An empty block still fills (mmnto-ai/totem#3141).
 
 export const DocTargetSchema = z.object({
   /** Relative path to the document */
@@ -436,7 +438,7 @@ export const ReviewConfigSchema = z
     lanes: z.array(z.string().min(1)).min(1).optional(),
   })
   .passthrough()
-  .default({});
+  .prefault({});
 
 /**
  * Whether `value` carries a character that cannot be rendered SAFELY into the
@@ -644,7 +646,7 @@ export const TotemConfigSchema = z.object({
   docs: z.array(DocTargetSchema).optional(),
 
   /** Optional: export targets for cross-model lesson enforcement (e.g., { gemini: '.gemini/styleguide.md' }) */
-  exports: z.record(z.string()).optional(),
+  exports: z.record(z.string(), z.string()).optional(),
 
   /** Optional: GitHub repositories to aggregate issues from (e.g., ['owner/repo', 'owner/repo2']) */
   repositories: z.array(z.string()).optional(),
@@ -701,7 +703,7 @@ export const TotemConfigSchema = z.object({
   substratePath: z.string().trim().min(1).optional(),
 
   /** Optional: named partitions mapping logical aliases to file path prefixes for context isolation (e.g., { core: ['packages/core/'], mcp: ['packages/mcp/'] }) */
-  partitions: z.record(z.array(z.string().min(1)).min(1)).optional(),
+  partitions: z.record(z.string(), z.array(z.string().min(1)).min(1)).optional(),
 
   /** Optional: custom secret patterns for DLP redaction (shared, version-controlled) */
   secrets: z.array(CustomSecretSchema).optional(),
@@ -823,7 +825,7 @@ export const TotemConfigSchema = z.object({
            *  only the exit code follows the knob. */
           enforce: z.enum(['block', 'advisory']).optional(),
         })
-        .default({}),
+        .prefault({}),
 
       /** The shield gate's OWN exit knob (mmnto-ai/totem#2525). Read at RUN
        *  time by `totem review --gate` — the run loads this config itself, so
@@ -844,7 +846,7 @@ export const TotemConfigSchema = z.object({
         .object({
           enforce: z.enum(['block', 'advisory', 'advisory-when-legged']).optional(),
         })
-        .default({}),
+        .prefault({}),
     })
     .optional(),
 

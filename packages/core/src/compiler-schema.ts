@@ -19,7 +19,7 @@ import { z } from 'zod';
  */
 export const NapiConfigSchema = z
   .object({
-    rule: z.record(z.unknown()),
+    rule: z.record(z.string(), z.unknown()),
   })
   .passthrough();
 

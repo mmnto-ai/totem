@@ -203,6 +203,16 @@ describe('VerdictArtifactSchema — structure', () => {
     expect(VerdictArtifactSchema.safeParse(verdict()).success).toBe(true);
   });
 
+  it('rejects an unknown schemaVersion major, naming the version in the error', () => {
+    const result = VerdictArtifactSchema.safeParse({ ...verdict(), schemaVersion: '2.0.0' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => i.message).join('\n')).toContain(
+        'unsupported verdict-artifact schemaVersion "2.0.0"',
+      );
+    }
+  });
+
   it('diffScope: refs required only where the source makes them meaningful', () => {
     const dh = 'd'.repeat(64);
     const withScope = (diffScope: unknown) =>

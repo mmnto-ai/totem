@@ -47,7 +47,7 @@ export type RuleMetric = z.infer<typeof RuleMetricSchema>;
 const RuleMetricsFileSchema = z.object({
   version: z.literal(1),
   /** Map of lessonHash → metrics */
-  rules: z.record(RuleMetricSchema),
+  rules: z.record(z.string(), RuleMetricSchema),
 });
 
 export type RuleMetricsFile = z.infer<typeof RuleMetricsFileSchema>;

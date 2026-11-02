@@ -91,7 +91,7 @@ const LEDGER_DIR = 'ledger';
  */
 const QBD_POINTER_FILE = '.qbd-correlation';
 
-/** UUID shape check — `session_id` is `z.string().uuid()` in the ledger schema. */
+/** UUID shape check — the same 8-4-4-4-12 hex acceptance as the ledger schema's `z.string().guid()` (zod 3's `.uuid()` shape). */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Which surface fired a `corpus_query`. Stamped as `activity_name`. */

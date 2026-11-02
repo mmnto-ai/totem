@@ -943,8 +943,11 @@ describe('strict, bounded schema', () => {
   }
 
   it('rejects the row typo "enviroment" with its path', () => {
-    expect(loadError(row({ enviroment: 'prod' }))).toBe(
-      "[Totem Error] Invalid action-policy.json: rows.0: Unrecognized key(s) in object: 'enviroment'",
+    // The tail is zod's own unrecognized-key text, whose wording moved between
+    // zod majors: the assertion pins Totem's prefix, the path and the offending
+    // key, and lets the library's phrasing between them vary.
+    expect(loadError(row({ enviroment: 'prod' }))).toMatch(
+      /^\[Totem Error\] Invalid action-policy\.json: rows\.0: Unrecognized key[^"']*["']enviroment["']$/,
     );
   });
 
@@ -960,8 +963,8 @@ describe('strict, bounded schema', () => {
         },
       ],
     };
-    expect(loadError(bad)).toBe(
-      "[Totem Error] Invalid action-policy.json: rows.0.scope: Unrecognized key(s) in object: 'command'",
+    expect(loadError(bad)).toMatch(
+      /^\[Totem Error\] Invalid action-policy\.json: rows\.0\.scope: Unrecognized key[^"']*["']command["']$/,
     );
   });
 

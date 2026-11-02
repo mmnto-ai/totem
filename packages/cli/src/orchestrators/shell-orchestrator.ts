@@ -180,7 +180,7 @@ const GeminiModelStatsSchema = z.object({
 
 const GeminiOutputSchema = z.object({
   response: z.string(),
-  stats: z.object({ models: z.record(GeminiModelStatsSchema) }),
+  stats: z.object({ models: z.record(z.string(), GeminiModelStatsSchema) }),
 });
 
 /**

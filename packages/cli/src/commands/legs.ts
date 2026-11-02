@@ -478,7 +478,8 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
         // newline between entries is this code's own layout, not attacker
         // input, so it survives (a whole-block flatten would destroy the list).
         .map(
-          (issue) => `  ${echoSafe(issue.path.join('.') || '<root>')}: ${echoSafe(issue.message)}`,
+          (issue) =>
+            `  ${echoSafe(issue.path.map(String).join('.') || '<root>')}: ${echoSafe(issue.message)}`,
         )
         .join('\n');
       throw new TotemError(

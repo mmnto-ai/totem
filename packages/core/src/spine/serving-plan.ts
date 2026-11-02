@@ -118,8 +118,12 @@ export const ServingInputSchema = z
                    */
                   contentHash: z
                     .string({
-                      required_error:
-                        "floor[].records[].contentHash is required: the floor file must carry the ledger's record.contentHash for each record",
+                      // zod 4 has no `required_error`: the error map fires this
+                      // text on an absent value and falls through otherwise.
+                      error: (issue) =>
+                        issue.input === undefined
+                          ? "floor[].records[].contentHash is required: the floor file must carry the ledger's record.contentHash for each record"
+                          : undefined,
                     })
                     .regex(/^[0-9a-f]{64}$/, {
                       message: 'floor[].records[].contentHash must be 64 lowercase hex characters',

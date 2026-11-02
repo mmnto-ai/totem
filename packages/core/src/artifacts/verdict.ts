@@ -79,12 +79,10 @@ const VERDICT_SCHEMA_VERSION_RE = /^1\.\d+\.\d+$/;
 /** Accept any 1.x version; reject other majors with the version NAMED (F1) —
  * mirrors run-artifact's `schemaVersionField` refine so the rejection error
  * carries the offending value, not just a static string. */
-const verdictSchemaVersionField = z.string().refine(
-  (v) => VERDICT_SCHEMA_VERSION_RE.test(v),
-  (v) => ({
-    message: `unsupported verdict-artifact schemaVersion "${v}" — this reader understands major ${VERDICT_ARTIFACT_KNOWN_MAJOR}.x; a new major requires a migration entry in loadVerdictArtifact`,
-  }),
-);
+const verdictSchemaVersionField = z.string().refine((v) => VERDICT_SCHEMA_VERSION_RE.test(v), {
+  error: (issue) =>
+    `unsupported verdict-artifact schemaVersion "${String(issue.input)}" — this reader understands major ${VERDICT_ARTIFACT_KNOWN_MAJOR}.x; a new major requires a migration entry in loadVerdictArtifact`,
+});
 
 /** sha256 hex content hash (full digest — identity, not display). */
 const SHA256_HEX = /^[0-9a-f]{64}$/;

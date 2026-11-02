@@ -187,6 +187,30 @@ describe('schema strictness', () => {
     expect(SelectionManifestRowSchema.safeParse(weighted).success).toBe(false);
   });
 
+  it('accepts a context naming only some of the closed keys (the key set is closed, not exhaustive; mmnto-ai/totem#3141)', () => {
+    const row = buildSelectionManifestRow(baseInput({ context: { query: 'q' } }));
+    expect(Object.keys(row.context)).toEqual(['query']);
+    expect(SelectionManifestRowSchema.safeParse(row).success).toBe(true);
+    // The empty subset is a subset too.
+    const empty = buildSelectionManifestRow(baseInput({ context: {} }));
+    expect(SelectionManifestRowSchema.safeParse(empty).success).toBe(true);
+  });
+
+  it('accepts an 8-4-4-4-12 hex session id outside RFC 4122 on the row and on the conflict pointer (zod 3 shape; mmnto-ai/totem#3141)', () => {
+    const offRfc = '12345678-1234-1234-1234-123456789abc';
+    const row = buildSelectionManifestRow(baseInput());
+    expect(SelectionManifestRowSchema.safeParse({ ...row, session_id: offRfc }).success).toBe(true);
+    expect(
+      SelectionManifestRowSchema.safeParse({
+        ...row,
+        attribution_conflict: { env_seat: 'a', minting_seat: 'b', pointer_session_id: offRfc },
+      }).success,
+    ).toBe(true);
+    expect(SelectionManifestRowSchema.safeParse({ ...row, session_id: 'not-a-uuid' }).success).toBe(
+      false,
+    );
+  });
+
   it('rejects partial measurement states — the trio travels together (PR #2625 CR round)', () => {
     // bytes without fingerprint
     expect(

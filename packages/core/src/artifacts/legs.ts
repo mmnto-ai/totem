@@ -196,14 +196,14 @@ function toSingleLine(text: string): string {
 }
 
 /** A string field that reaches a hook's stdout: no C0/C1 bytes, hence single-line. */
-function controlFreeText(label: string): z.ZodEffects<z.ZodString, string, string> {
+function controlFreeText(label: string): z.ZodString {
   return z.string().refine((value) => !hasControlByte(value), {
     message: `${label} must be a single line free of control characters (C0 0-31, DEL/C1 127-159) — the value is echoed on the gate's stdout`,
   });
 }
 
 /** Same, but also non-empty. */
-function requiredControlFreeText(label: string): z.ZodEffects<z.ZodString, string, string> {
+function requiredControlFreeText(label: string): z.ZodString {
   return z
     .string()
     .min(1, `${label} must not be empty`)
@@ -529,7 +529,7 @@ function oneLineZodReason(zodError: z.ZodError): string {
   return toSingleLine(
     zodError.issues
       .map((issue) => {
-        const at = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+        const at = issue.path.length > 0 ? issue.path.map(String).join('.') : '<root>';
         return `${at}: ${issue.message}`;
       })
       .join('; '),

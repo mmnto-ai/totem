@@ -90,7 +90,7 @@ export const CapabilityClaimSchema = z.object({
     .string()
     .datetime({ message: 'assertedAt must be an RFC-3339 UTC datetime (Z suffix)' }),
   /** Descriptive metadata (incl. model/backend) — NEVER part of `claimId` (identity ≠ content). */
-  payload: z.record(z.unknown()).optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
 });
 export type CapabilityClaim = z.infer<typeof CapabilityClaimSchema>;
 

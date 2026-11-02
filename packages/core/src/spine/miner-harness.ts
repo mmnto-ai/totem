@@ -80,7 +80,7 @@ export function checkParsedLedgers(ledgers: MinerLedgers): FmViolation[] {
 // a `provenance` segment ⇒ FM(a) (incomplete tuple), an `unverified` segment ⇒
 // FM(b) (non-Yellow mint). Segment-level (not a substring on the joined path) so
 // a future field like `classifierProvenanceRef` can't masquerade as `provenance`.
-function mapZodIssueToClause(issue: { path: (string | number)[]; message: string }): FmViolation {
+function mapZodIssueToClause(issue: { path: PropertyKey[]; message: string }): FmViolation {
   const segments = issue.path.map(String);
   const clause: FmClause = segments.includes('unverified')
     ? 'b'

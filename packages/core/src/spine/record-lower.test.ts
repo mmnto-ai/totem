@@ -294,7 +294,7 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
 
   it('couples the compiled `examples` and `curation` shapes to the grammar’s schemas', () => {
     expect(Object.keys(RuleRecordExampleSchema.shape).sort()).toEqual(['bad', 'good']);
-    expect(Object.keys(RuleCurationSchema.innerType().shape).sort()).toEqual([
+    expect(Object.keys(RuleCurationSchema.shape).sort()).toEqual([
       'baseline5Phase',
       'curatedAt',
       'curatedBy',

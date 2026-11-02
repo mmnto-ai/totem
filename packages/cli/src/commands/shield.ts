@@ -302,11 +302,9 @@ export type StructuredVerdictExtractionResult =
 const MAX_EXTRACTION_ISSUES = 4;
 const MAX_EXTRACTION_ISSUE_CHARS = 160;
 
-function summarizeValidationIssues(
-  issues: Array<{ path: Array<string | number>; code: string }>,
-): string[] {
+function summarizeValidationIssues(issues: Array<{ path: PropertyKey[]; code: string }>): string[] {
   return issues.slice(0, MAX_EXTRACTION_ISSUES).map((issue) => {
-    const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+    const path = issue.path.length > 0 ? issue.path.map(String).join('.') : '<root>';
     return `${path}: ${issue.code}`.slice(0, MAX_EXTRACTION_ISSUE_CHARS);
   });
 }

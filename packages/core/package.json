@@ -63,7 +63,7 @@
     "unified": "^11.0.0",
     "web-tree-sitter": "^0.26.6",
     "yaml": "^2.4.0",
-    "zod": "^3.24.0"
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
     "@google/genai": ">=2.0.0"

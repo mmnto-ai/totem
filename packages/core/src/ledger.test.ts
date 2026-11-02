@@ -170,6 +170,18 @@ describe('LedgerEventSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  // mmnto-ai/totem#3141: zod 4's `.uuid()` also requires the RFC 4122 version and
+  // variant nibbles, where zod 3 accepted any 8-4-4-4-12 hex string. The ledger
+  // is a persistent file parsed row by row, so the schema keeps the wider shape
+  // (`.guid()`) and a row an earlier release wrote still parses.
+  it('accepts an 8-4-4-4-12 hex session_id or correlation_id whose version and variant nibbles are outside RFC 4122', () => {
+    const offRfc = '12345678-1234-1234-1234-123456789abc';
+    for (const overrides of [{ session_id: offRfc }, { correlation_id: offRfc }]) {
+      const result = LedgerEventSchema.safeParse(makeActivityEvent(overrides));
+      expect(result.success, JSON.stringify(overrides)).toBe(true);
+    }
+  });
+
   it('rejects an empty activity_name', () => {
     const event = makeActivityEvent({ activity_name: '' });
     const result = LedgerEventSchema.safeParse(event);

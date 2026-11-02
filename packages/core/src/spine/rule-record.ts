@@ -547,9 +547,11 @@ export type RuleScope = z.infer<typeof RuleScopeSchema>;
  * the interior is carried verbatim and only its shape (a non-empty mapping) is
  * checked here. The § Design 4 inexpressible-key scan still descends into it.
  */
-const AstGrepRulePayloadSchema = z.record(z.unknown()).refine((v) => Object.keys(v).length > 0, {
-  message: 'target.rule must be a non-empty compound payload',
-});
+const AstGrepRulePayloadSchema = z
+  .record(z.string(), z.unknown())
+  .refine((v) => Object.keys(v).length > 0, {
+    message: 'target.rule must be a non-empty compound payload',
+  });
 
 /**
  * § Design 4 — `target`. `language` is REQUIRED for ast-grep and FORBIDDEN for

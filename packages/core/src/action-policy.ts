@@ -164,17 +164,14 @@ const commandPattern = nonBlank('command pattern')
       message: `each command-pattern token may carry at most ${ACTION_POLICY_COMMAND_TOKEN_STAR_MAX} "*" ("**" counts two)`,
     },
   )
-  .refine(
-    (p) => !startsBeforeProgram(p),
-    (p) => {
-      const first = p.trim().split(/\s+/)[0] ?? '';
-      return {
-        message: /[/\\]/.test(first)
-          ? `a command pattern's first token "${first}" has the basename of a wrapper the gate skips before the program, so it could never match: a repository script whose basename is a wrapper's cannot be governed by a command row`
-          : 'a command pattern starts at the program: drop the leading wrapper, reserved word, assignment, "function", "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)',
-      };
+  .refine((p) => !startsBeforeProgram(p), {
+    error: (issue) => {
+      const first = String(issue.input).trim().split(/\s+/)[0] ?? '';
+      return /[/\\]/.test(first)
+        ? `a command pattern's first token "${first}" has the basename of a wrapper the gate skips before the program, so it could never match: a repository script whose basename is a wrapper's cannot be governed by a command row`
+        : 'a command pattern starts at the program: drop the leading wrapper, reserved word, assignment, "function", "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)';
     },
-  );
+  });
 
 export const ActionKindSchema = z.enum(ACTION_KINDS);
 

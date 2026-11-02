@@ -123,13 +123,16 @@ const LedgerEventShape = z.object({
    * Heuristic (explicit UUID supersedes the rolling-2h activity heuristic
    * when present). Optional for backward-compat.
    */
-  session_id: z.string().uuid().optional(),
+  session_id: z.string().guid().optional(),
   /**
    * Trace correlation ID per ADR-014 — links an orchestrator run to
    * the MCP tool calls it triggered. Optional; populated by A.3.c
-   * end-to-end correlation propagation.
+   * end-to-end correlation propagation. `.guid()` is zod 4's name for the
+   * 8-4-4-4-12 hex shape zod 3's `.uuid()` accepted; v4's `.uuid()` also
+   * requires the RFC 4122 variant bits, and a row written by an earlier
+   * release must still parse (mmnto-ai/totem#3141).
    */
-  correlation_id: z.string().uuid().optional(),
+  correlation_id: z.string().guid().optional(),
   /**
    * Sub-type discriminator for activity events. Examples:
    *   `mcp_call`  → 'search_knowledge' | 'describe_project' | ...

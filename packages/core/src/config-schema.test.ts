@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import type { TotemConfig } from './config-schema.js';
 import {
@@ -1089,6 +1090,11 @@ describe('DoctorConfigSchema', () => {
     if (result.success) {
       expect(result.data.doctor).toBeUndefined();
     }
+    // mmnto-ai/totem#3141: zod 4's `.optional()` applies an inner block default
+    // where zod 3 returned `undefined`, so DoctorConfigSchema must carry none —
+    // with one, the assertion above fails and every reader of the parsed config
+    // sees a `doctor` block the file never declared.
+    expect(DoctorConfigSchema.safeParse(undefined).success).toBe(false);
   });
 
   it('TotemConfigSchema fills DoctorConfigSchema defaults when doctor is present but empty', () => {
@@ -1517,5 +1523,97 @@ describe('searchRelevanceFloor — optional, NO default (mmnto-ai/totem#2727)', 
     expect(
       TotemConfigSchema.safeParse({ targets: BASE_TARGETS, searchRelevanceFloor: '0.5' }).success,
     ).toBe(false);
+  });
+});
+
+// ─── zod 4 default placement (mmnto-ai/totem#3141) ──────────────────────────
+//
+// zod 4's `.optional()` (and `.nullable()`) applies an inner `.default()` or
+// `.prefault()` where zod 3 returned `undefined`, so an optional block whose
+// schema carries a block-level default parses an ABSENT block to a filled
+// object the config never declared — the DoctorConfigSchema shape the
+// migration removed. This walks every node of the config schema and refuses
+// the pair anywhere, so the class cannot return through a new block.
+
+describe('TotemConfigSchema — no optional-wrapped block default (zod 4)', () => {
+  // `def` is zod 4's public definition accessor on every schema (`schema.def.type`,
+  // `.def.innerType`, `.def.shape`); the `_zod` internals are not read.
+  interface ZodNode {
+    def: { type: string } & Record<string, unknown>;
+  }
+  const isNode = (value: unknown): value is ZodNode =>
+    typeof value === 'object' &&
+    value !== null &&
+    'def' in value &&
+    typeof (value as { def: unknown }).def === 'object';
+  const isBlockDefault = (value: unknown): boolean =>
+    isNode(value) && (value.def.type === 'default' || value.def.type === 'prefault');
+
+  /** Every `<path>: <wrapper> over <default|prefault>` pair reachable from `root`. */
+  function optionalOverDefaultPairs(root: unknown, rootName: string): string[] {
+    const seen = new Set<unknown>();
+    const hits: string[] = [];
+    const walk = (node: unknown, at: string): void => {
+      if (!isNode(node) || seen.has(node)) return;
+      seen.add(node);
+      const def = node.def;
+      if (
+        (def.type === 'optional' || def.type === 'nullable') &&
+        isBlockDefault(def['innerType'])
+      ) {
+        hits.push(`${at}: ${def.type} over ${(def['innerType'] as ZodNode).def.type}`);
+      }
+      for (const key of [
+        'innerType',
+        'element',
+        'valueType',
+        'keyType',
+        'in',
+        'out',
+        'left',
+        'right',
+      ]) {
+        if (def[key] !== undefined) walk(def[key], `${at}.${key}`);
+      }
+      const shape = def['shape'];
+      if (typeof shape === 'object' && shape !== null) {
+        for (const [key, value] of Object.entries(shape as Record<string, unknown>)) {
+          walk(value, `${at}.${key}`);
+        }
+      }
+      for (const listKey of ['options', 'items']) {
+        const list = def[listKey];
+        if (Array.isArray(list)) list.forEach((value, i) => walk(value, `${at}.${listKey}[${i}]`));
+      }
+      const getter = def['getter'];
+      if (typeof getter === 'function') walk((getter as () => unknown)(), `${at}.lazy`);
+    };
+    walk(root, rootName);
+    return hits;
+  }
+
+  it('finds no optional or nullable wrapper over a default or prefault anywhere in the config schema', () => {
+    expect(optionalOverDefaultPairs(TotemConfigSchema, 'TotemConfigSchema')).toEqual([]);
+  });
+
+  it('names the removed DoctorConfigSchema shape when handed it (the detector reads the pair)', () => {
+    const removed = z.object({ doctor: DoctorConfigSchema.prefault({}).optional() });
+    expect(optionalOverDefaultPairs(removed, 'config')).toEqual([
+      'config.doctor: optional over prefault',
+    ]);
+    // …and that shape does what the migration found: an absent block parses filled.
+    expect(removed.parse({}).doctor).toEqual({ staleRuleWindow: 10 });
+  });
+
+  it('the three `.prefault({})` blocks still fill their inner defaults when the block is absent', () => {
+    // zod 4's `.default({})` would hand `{}` back unparsed and leave these fields
+    // missing; `.prefault({})` parses it, as zod 3's `.default({})` did.
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, hooks: {} });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.sourceExtensions).toEqual(['.ts', '.tsx', '.js', '.jsx']);
+      expect(result.data.hooks?.legsOwed.globs).toEqual([...DEFAULT_LEGS_OWED_GLOBS]);
+      expect(result.data.hooks?.shield).toEqual({});
+    }
   });
 });

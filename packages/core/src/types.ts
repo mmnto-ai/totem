@@ -342,7 +342,7 @@ export const LessonFrontmatterSchema = z.object({
   compilation: z
     .object({
       engine: z.enum(['regex', 'ast', 'ast-grep']).optional(),
-      pattern: z.union([z.string(), z.record(z.unknown())]).optional(),
+      pattern: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
     })
     .optional(),
 });
