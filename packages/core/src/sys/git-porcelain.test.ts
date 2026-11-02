@@ -4,9 +4,11 @@
 // assume: `diff.external` replaces the patch with a tool's output, `color.ui
 // always` wraps it in escape sequences, the prefix settings change the `a/` and
 // `b/` labels the header parsers read as the repository path, `diff.relative`
-// strips the path and drops changes outside the working directory,
-// `diff.context` hides the unchanged line a directive sits on, and a textconv
-// driver shows converted text where the blob readers see bytes. These tests run
+// strips the path and drops changes outside the working directory, and a
+// textconv driver shows converted text where the blob readers see bytes
+// (`diff.context 0` hides the unchanged line a directive sits on, a false FAIL
+// that names its file and line; a `--unified` pin implies `--patch` and would
+// turn the stat read into a patch, so that one is disclosed, not pinned). These tests run
 // REAL git in a throwaway repository with each setting applied and assert the
 // readers still see the porcelain; on the code before the pins each one fails
 // the way the issue measured. The census at the end keeps every patch- or
@@ -88,6 +90,10 @@ describe('porcelain pins under a rewriting git config (mmnto-ai/totem#3113)', ()
     const stat = getGitDiffStat(tmp);
     expect(stat).not.toContain(ESC);
     expect(stat).toContain('src/v.ts');
+    // The stat read must stay a stat: a `--unified` pin implies `--patch` and
+    // made this read print the whole patch (the second read's blocking finding).
+    expect(stat).not.toContain('diff --git');
+    expect(stat).not.toContain('+console.log');
   });
 
   it('diff.mnemonicPrefix: the staged reader labels the file b/, not i/', () => {
@@ -129,33 +135,20 @@ describe('porcelain pins under a rewriting git config (mmnto-ai/totem#3113)', ()
     expect(diff).not.toContain('diff --git a/x.ts b/x.ts');
   });
 
-  it('diff.context 0: the range reader keeps the three context lines a next-line directive needs', () => {
-    git('config', 'diff.context', '0');
-    const diff = getGitDiffRange(tmp, 'HEAD~1..HEAD');
-    expect(diff).toMatch(/^@@ -1 \+1,2 @@/m);
-    const added = extractAddedLines(diff).filter((a) => a.file === 'src/v.ts');
-    expect(added).toEqual([
-      {
-        file: 'src/v.ts',
-        line: 'console.log(1);',
-        lineNumber: 2,
-        precedingLine: 'export const a = 1;',
-      },
-    ]);
-  });
-
   it('a textconv driver: the range reader shows the bytes the blob readers see, not the converted text', () => {
     write('.gitattributes', '*.txt diff=up\n');
     write('f.txt', 'abcd\n');
     git('add', '-A');
     git('commit', '-q', '-m', 'txt');
-    write('f.txt', 'abcd\nabce\n');
+    write('f.txt', 'abcd\nabcd\n');
     git('add', '-A');
     git('commit', '-q', '-m', 'txt2');
+    // The converter maps every letter of the added line, so the converted form
+    // (`+ABCD`) and the bytes (`+abcd`) cannot both be present.
     git('config', 'diff.up.textconv', 'sed y/abcd/ABCD/');
     const diff = getGitDiffRange(tmp, 'HEAD~1..HEAD');
-    expect(diff).toContain('+abce');
-    expect(diff).not.toContain('ABCE');
+    expect(diff).toContain('+abcd');
+    expect(diff).not.toContain('ABCD');
   });
 
   it('diff.suppressBlankEmpty (no flag exists): the parser counts the empty context line, so numbers and the directive lookup hold', () => {
@@ -184,17 +177,37 @@ describe('porcelain pins under a rewriting git config (mmnto-ai/totem#3113)', ()
 // form (it only changes the terminators of those four outputs, and alone it
 // still prints a patch), so an argv carrying `-z` without one of the four is
 // held to the rule. Every other `git diff` argv, and every `git log` argv that
-// prints a patch or a stat (`-p`, `-u`, `--patch`, `--stat`,
-// `--patch-with-stat`, `--cc`), must spread GIT_DIFF_PORCELAIN_ARGS as the
-// element directly after the subcommand, before any ref, option or `--`. The
-// scanner reads array literals with balanced brackets and either quote style,
-// splits them at top-level commas, and finds the subcommand wherever it sits
-// (after a `'-C', dir` pair too), so a spawn written in any of the repository's
-// idioms is read.
+// prints a patch or a stat (`-p`, `-u`, `-U<n>`, `--unified`, `--patch`,
+// `--stat`, `--stat=<n>`, `--patch-with-stat`, `--cc`, `--word-diff`), must
+// spread GIT_DIFF_PORCELAIN_ARGS as the element directly after the subcommand,
+// before any ref, option or `--`. The scanner reads array literals with
+// balanced brackets and either quote style, skips comments, closes a `'` or
+// `"` string at the end of its line (so a regex literal carrying a quote can
+// desynchronise it only to the end of that line), splits at top-level commas,
+// and finds the subcommand wherever it sits (after a `'-C', dir` pair too), so
+// a spawn written in any of the repository's idioms is read. It does not read
+// an argv whose subcommand is a variable, nor `show`, `diff-tree` or
+// `stash show`, none of which the tree spawns for a patch today.
 
 const LIST_FORM_FLAGS = ['--name-only', '--name-status', '--numstat', '--shortstat'];
-const PATCH_OR_STAT_FLAGS = ['-p', '-u', '--patch', '--stat', '--patch-with-stat', '--cc'];
+const PATCH_OR_STAT_FLAGS = [
+  '-p',
+  '-u',
+  '--patch',
+  '--stat',
+  '--patch-with-stat',
+  '--cc',
+  '--word-diff',
+];
 const PINS_TOKEN = '...GIT_DIFF_PORCELAIN_ARGS';
+
+/** A token that makes git print a patch or a stat, whatever else the argv carries. */
+const printsPatchOrStat = (token: string): boolean =>
+  PATCH_OR_STAT_FLAGS.includes(token) ||
+  token.startsWith('--stat=') ||
+  token.startsWith('--unified') ||
+  token.startsWith('--word-diff=') ||
+  /^-U\d*$/.test(token);
 
 function listTsSources(dir: string, out: string[]): void {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -221,6 +234,9 @@ function arrayLiterals(text: string): Array<{ start: number; tokens: string[] }>
     if (quote !== null) {
       if (ch === '\\') i++;
       else if (ch === quote) quote = null;
+      // A `'` or `"` string cannot span a line, so a quote still open at the
+      // line end was never a string (a regex literal's quote): close it there.
+      else if (ch === '\n' && quote !== '`') quote = null;
       continue;
     }
     // A comment's apostrophes ("git's", "don't") would otherwise open a quote
@@ -307,10 +323,10 @@ function unpinnedGitDiffSpawns(repoRoot: string): { violations: string[]; seen: 
       seen++;
       const subcommand = literals[at]!;
       const rest = literals.slice(at + 1);
-      const printsPatchOrStat = rest.some((t) => t !== null && PATCH_OR_STAT_FLAGS.includes(t));
-      if (subcommand === 'log' && !printsPatchOrStat) continue;
+      const producesPatchOrStat = rest.some((t) => t !== null && printsPatchOrStat(t));
+      if (subcommand === 'log' && !producesPatchOrStat) continue;
       const listForm = rest.some((t) => t !== null && LIST_FORM_FLAGS.includes(t));
-      if (subcommand === 'diff' && listForm && !printsPatchOrStat) continue;
+      if (subcommand === 'diff' && listForm && !producesPatchOrStat) continue;
       if (tokens[at + 1] === PINS_TOKEN) continue;
       const line = text.slice(0, start).split('\n').length;
       const rel = path.relative(repoRoot, file).split(path.sep).join('/');
@@ -357,11 +373,14 @@ describe('census: patch-producing git spawns spread GIT_DIFF_PORCELAIN_ARGS (mmn
           "// a comment with git's apostrophe, which must not swallow the next line",
           "safeExec('git', ['diff', '--cached']);", // 14 unpinned, after the comment
           "safeExec('gh', ['pr', 'diff', String(num), '--', ...files]);", // not git's diff: unseen
+          "const q = s.replace(/'/g, '');", // a regex literal with a quote: closed at the line end
+          "safeExec('git', ['diff', 'HEAD']);", // 15 unpinned, after the regex line
+          "safeExec('git', ['diff', '--name-only', '-U3', ref]);", // 16 a list flag beside a patch spelling
         ].join('\n'),
         'utf-8',
       );
       const { violations, seen } = unpinnedGitDiffSpawns(dir);
-      expect(seen).toBe(14);
+      expect(seen).toBe(16);
       expect(violations).toEqual([
         "packages/core/src/x.ts:1 ['diff', 'HEAD']",
         "packages/core/src/x.ts:4 ['log', '-p', range]",
@@ -372,6 +391,8 @@ describe('census: patch-producing git spawns spread GIT_DIFF_PORCELAIN_ARGS (mmn
         "packages/core/src/x.ts:10 ['diff', '--stat', '--numstat', ref]",
         "packages/core/src/x.ts:11 ['diff', '-z', ref]",
         "packages/core/src/x.ts:15 ['diff', '--cached']",
+        "packages/core/src/x.ts:18 ['diff', 'HEAD']",
+        "packages/core/src/x.ts:19 ['diff', '--name-only', '-U3', ref]",
       ]);
     } finally {
       cleanTmpDir(dir);

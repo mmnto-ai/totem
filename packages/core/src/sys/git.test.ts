@@ -70,13 +70,14 @@ import {
 } from './git.js';
 
 describe('GIT_DIFF_PORCELAIN_ARGS (mmnto-ai/totem#3113)', () => {
-  it('is the eight porcelain pins, each restoring one default a config key can rewrite', () => {
+  it('is the seven porcelain pins, each fixing one output property a config key can rewrite', () => {
+    // No `--unified`: it implies `--patch`, which would turn the stat read into
+    // a patch (the second falsification read's blocking finding).
     expect([...GIT_DIFF_PORCELAIN_ARGS]).toEqual([
       '--no-ext-diff',
       '--no-textconv',
       '--no-color',
       '--no-relative',
-      '--unified=3',
       '--submodule=short',
       '--src-prefix=a/',
       '--dst-prefix=b/',

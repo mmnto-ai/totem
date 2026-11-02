@@ -33,7 +33,7 @@ describe('extractAddedLines — empty context lines (mmnto-ai/totem#3113)', () =
     expect(extractAddedLines(suppressed)).toEqual(expected);
   });
 
-  it('does not count an empty line before the first hunk or between file blocks', () => {
+  it('a hunk header resets the count, so empty lines before the first hunk or between file blocks do not shift the numbers', () => {
     const diff = [
       '',
       ...HEADER,
