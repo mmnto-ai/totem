@@ -1599,4 +1599,16 @@ describe('TotemConfigSchema — no optional-wrapped block default (zod 4)', () =
     // …and that shape does what the migration found: an absent block parses filled.
     expect(removed.parse({}).doctor).toEqual({ staleRuleWindow: 10 });
   });
+
+  it('the three `.prefault({})` blocks still fill their inner defaults when the block is absent', () => {
+    // zod 4's `.default({})` would hand `{}` back unparsed and leave these fields
+    // missing; `.prefault({})` parses it, as zod 3's `.default({})` did.
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, hooks: {} });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.sourceExtensions).toEqual(['.ts', '.tsx', '.js', '.jsx']);
+      expect(result.data.hooks?.legsOwed.globs).toEqual([...DEFAULT_LEGS_OWED_GLOBS]);
+      expect(result.data.hooks?.shield).toEqual({});
+    }
+  });
 });
