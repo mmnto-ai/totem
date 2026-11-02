@@ -1089,6 +1089,11 @@ describe('DoctorConfigSchema', () => {
     if (result.success) {
       expect(result.data.doctor).toBeUndefined();
     }
+    // mmnto-ai/totem#3141: zod 4's `.optional()` applies an inner block default
+    // where zod 3 returned `undefined`, so DoctorConfigSchema must carry none —
+    // with one, the assertion above fails and every reader of the parsed config
+    // sees a `doctor` block the file never declared.
+    expect(DoctorConfigSchema.safeParse(undefined).success).toBe(false);
   });
 
   it('TotemConfigSchema fills DoctorConfigSchema defaults when doctor is present but empty', () => {

@@ -448,6 +448,26 @@ describe('planServingWrite: refusals, before any write (mmnto-ai/totem#3036 B2)'
     }
   });
 
+  it('a present but malformed contentHash gets the shape message, not the required-field one (the error map falls through)', () => {
+    // mmnto-ai/totem#3141: zod 4 has no `required_error`; the field's error map
+    // returns the required text only for an absent value and `undefined`
+    // otherwise, so the regex check's own message still reaches the reader.
+    const f = fixture();
+    const res = ServingInputSchema.safeParse({
+      ...f.input,
+      floor: [
+        { legacyHash: LEGACY_A, records: [{ path: 'p', ruleId: RULE_A, contentHash: 'nope' }] },
+      ],
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues[0]!.path).toEqual(['floor', 0, 'records', 0, 'contentHash']);
+      expect(res.error.issues[0]!.message).toBe(
+        'floor[].records[].contentHash must be 64 lowercase hex characters',
+      );
+    }
+  });
+
   it('binds a floor record by content (the whole stale-floor check): a match passes, another revision refuses', () => {
     const f = fixture();
     f.input.floor[0]!.records[0] = {
