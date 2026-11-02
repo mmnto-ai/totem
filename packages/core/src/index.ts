@@ -886,6 +886,7 @@ export {
   getLatestTag,
   getOriginRepoName,
   getTagDate,
+  GIT_DIFF_PORCELAIN_ARGS,
   inferScopeFromFiles,
   isFileDirty,
   mainCheckoutFromGitFileSync,

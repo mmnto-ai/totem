@@ -16,7 +16,7 @@ export {
   resolveGitRoot,
 } from '@mmnto/totem';
 
-import { safeExec } from '@mmnto/totem';
+import { GIT_DIFF_PORCELAIN_ARGS, safeExec } from '@mmnto/totem';
 
 // ─── Incremental shield helpers (#1010) ─────────────────
 
@@ -80,7 +80,10 @@ export function getNameStatus(
  */
 export function getDiffBetween(cwd: string, base: string, head?: string): string {
   try {
-    return safeExec('git', ['diff', base, head ?? 'HEAD'], { cwd, maxBuffer: 10 * 1024 * 1024 });
+    return safeExec('git', ['diff', ...GIT_DIFF_PORCELAIN_ARGS, base, head ?? 'HEAD'], {
+      cwd,
+      maxBuffer: 10 * 1024 * 1024,
+    });
   } catch {
     return '';
   }

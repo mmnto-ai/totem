@@ -17,6 +17,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { ResolvedPrInput } from '@mmnto/totem';
+import { GIT_DIFF_PORCELAIN_ARGS } from '@mmnto/totem';
 
 import { computeFixtureSha, enumeratePrMetas } from './spine-windtunnel.js';
 
@@ -62,7 +63,7 @@ export function resolvePrGit(
     `rev-parse parent of ${mergeCommit}`,
   ).trim();
   const diff = gitText(
-    ['diff', '--no-color', '--no-ext-diff', '--end-of-options', baseSha, headSha],
+    ['diff', ...GIT_DIFF_PORCELAIN_ARGS, '--end-of-options', baseSha, headSha],
     lcDir,
     safeExec,
     `diff ${baseSha}..${headSha}`,
